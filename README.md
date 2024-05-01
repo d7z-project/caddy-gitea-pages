@@ -1,22 +1,22 @@
-# Gitea Pages Caddy Plugin
+# Gitea Pages
 
-English (Google TR) | [中文](./README_zh.md)
+[English (Google TR)](./README_en.md) | 中文
 
-> Gitea Pages implemented with reference to Github Pages.
+> 参照 Github Pages 实现的 Gitea Pages
 
-## Installation Instructions
+## 安装说明
 
-`xcaddy` utility is required to generate the Caddy executable with the following command
+此处需要用到 `xcaddy` 工具，使用如下命令生成 Caddy 执行文件
 
 ```bash
 xcaddy build --with git.d7z.net/d7z-project/caddy-gitea-pages
-# List the current modules
-. /caddy list-modules | grep gitea
+# 列出当前模块
+./caddy list-modules | grep gitea
 ```
 
-## Configuration Notes
+## 配置说明
 
-After installing Caddy, write the following configuration in ``Caddyfile``.
+安装后 Caddy 后, 在 `Caddyfile` 写入如下配置:
 
 ```conf
 {
@@ -25,35 +25,37 @@ After installing Caddy, write the following configuration in ``Caddyfile``.
 
 :80
 gitea {
-   # Gitea server address
+   # Gitea 服务器地址
    server https://gitea.com
    # Gitea Token
    token please-replace-it
-   # Default domain, similar to Github's github.io
+   # 默认域名，类似于 Github 的 github.io
    domain example.com
 }
 
 ```
 
-The token requires the following permissions:
+其中，token 需要如下权限：
 
-- `organization:read`
-- `repository:read`
-- `user:read`
+- organization:read
+- repository:read
+- user:read
 
-More detailed configuration can be found in [Caddyfile](./Caddyfile)
+更详细的配置可查看 [Caddyfile](./Caddyfile)
 
 
-## Usage Notes
+## 使用说明
 
-`https://gitea.com/owner/repo.git` corresponds to `owner.example.com/repo` in the example configuration; if you want to access the domain name configured by `CNAME`, you need to access the corresponding `<owner>.example.com/<repo>` domain of the repository to establish the link first. relationship , when accessing `owner.example.com` it will hit `gita.com/owner/owner.example.com` repo.
+仓库 `https://gitea.com/owner/repo.git` 对应示例配置中的 `owner.example.com/repo`
 
-**Note**: You need to have `gh-pages` branch and `CNAME` file in the branch to access the repository, if you still can't access it, you can restart Caddy to clear the cache.
+如需访问 `CNAME` 配置的域名，则需要先访问仓库对应的 `<owner>.example.com/<repo>` 域名, 此操作只需完成一次。
 
-## Acknowledgments
+**注意**： 需要仓库存在 `gh-pages` 分支和分支内存在 `CNAME` 文件才可访问，如果配置后仍无法访问可重启 Caddy 来清理缓存。
 
-This project was inspired by [42wim/caddy-gitea](https://github.com/42wim/caddy-gitea).
+## 致谢
+
+此项目参考了 [42wim/caddy-gitea](https://github.com/42wim/caddy-gitea)
 
 ## LICENSE
 
-uses [Apache-2.0](./LICENSE)
+此项目使用 [Apache-2.0](./LICENSE)
