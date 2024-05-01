@@ -1,9 +1,9 @@
 {
     order gitea before file_server
+    auto_https disable_redirects
 }
-:80
 
-gitea {
+(default) {
    # Gitea 服务器地址
    server https://gitea.com
    # Gitea Token
@@ -16,4 +16,14 @@ gitea {
    error40x path/to/file
    # 默认 50x 页面,可填写路径或者 URL
    error50x path/to/file
+}
+
+http:// {
+  import default
+}
+
+https://  {
+  ## 填入 https 配置
+  # tls
+  import default
 }

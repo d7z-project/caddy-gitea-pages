@@ -14,7 +14,11 @@ xcaddy build --with git.d7z.net/d7z-project/caddy-gitea-pages
 
 ## 配置说明
 
-Caddy 配置参考如下：
+安装后 Caddy 后写入如下配置，在 DNS 控制台绑定域名和 IP 即可。
+
+例如： `https://gitea.com/owner/repo.git` 对应如下配置中的 `owner.example.com/repo`
+
+注意： 需要仓库存在 `gh-pages` 分支和分支内存在 `CNAME` 文件才可访问，如果配置后仍无法访问可重启 Caddy 来清理缓存。
 
 ```conf
 {
