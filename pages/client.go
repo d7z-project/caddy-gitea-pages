@@ -14,14 +14,16 @@ var (
 )
 
 type PageClient struct {
-	Server      string
-	Token       string
-	BaseDomain  string
-	client      *gitea.Client
-	DomainAlias *CustomDomains
-	pagesConfig *PageConfigGroup
-	ErrorPages  *ErrorPages
-	logger      *zap.Logger
+	Server       string
+	Token        string
+	BaseDomain   string
+	client       *gitea.Client
+	DomainAlias  *CustomDomains
+	pagesConfig  *PageConfigGroup
+	ErrorPages   *ErrorPages
+	AutoRedirect bool
+	ServerProto  string
+	logger       *zap.Logger
 }
 
 func NewPageClient(
@@ -37,7 +39,7 @@ func NewPageClient(
 	if err != nil {
 		return nil, err
 	}
-	alias, err := NewCustomDomains(config.Alias)
+	alias, err := NewCustomDomains(config.Alias, config.SharedAlias)
 	if err != nil {
 		return nil, err
 	}
@@ -46,14 +48,16 @@ func NewPageClient(
 		return nil, err
 	}
 	return &PageClient{
-		Server:      config.Server,
-		Token:       config.Token,
-		BaseDomain:  "." + strings.Trim(config.Domain, "."),
-		client:      client,
-		DomainAlias: alias,
-		pagesConfig: NewDomainConfig(),
-		ErrorPages:  pages,
-		logger:      logger,
+		Server:       config.Server,
+		Token:        config.Token,
+		BaseDomain:   "." + strings.Trim(config.Domain, "."),
+		client:       client,
+		DomainAlias:  alias,
+		pagesConfig:  NewDomainConfig(),
+		ErrorPages:   pages,
+		logger:       logger,
+		AutoRedirect: config.AutoRedirect,
+		ServerProto:  config.ServerProto,
 	}, nil
 }
 

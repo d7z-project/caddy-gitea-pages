@@ -32,10 +32,16 @@ func (m *Middleware) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				d.Args(&m.Config.Domain)
 			case "alias":
 				d.Args(&m.Config.Alias)
+			case "shared":
+				m.Config.SharedAlias = true
 			case "error40x":
 				d.Args(&m.Config.Error40xPage)
 			case "error50x":
 				d.Args(&m.Config.Error50xPage)
+			case "redirect":
+				m.Config.AutoRedirect = true
+			case "proto":
+				d.Args(&m.Config.ServerProto)
 			}
 		}
 	}
@@ -47,6 +53,9 @@ func parseCaddyfile(middleware *Middleware) func(httpcaddyfile.Helper) (caddyhtt
 		err := middleware.UnmarshalCaddyfile(h.Dispenser)
 		if err != nil {
 			return nil, err
+		}
+		if middleware.Config.ServerProto == "" {
+			middleware.Config.ServerProto = "http"
 		}
 		return middleware, nil
 	}

@@ -14,14 +14,14 @@ xcaddy build --with git.d7z.net/d7z-project/caddy-gitea-pages
 
 ## 配置说明
 
-安装后 Caddy 后写入如下配置，在 DNS 控制台绑定域名和 IP 即可。
+安装后 Caddy 后, 在 `Caddyfile` 写入如下配置:
 
 ```conf
 {
     order gitea before file_server
 }
-:80
 
+:80
 gitea {
    # Gitea 服务器地址
    server https://gitea.com
@@ -29,13 +29,8 @@ gitea {
    token please-replace-it
    # 默认域名，类似于 Github 的 github.io
    domain example.com
-   # CNAME 配置缓存地址
-   alias path/to/file
-   # 默认 404 页面,可填写路径或者 URL
-   error40x path/to/file
-   # 默认 50x 页面,可填写路径或者 URL
-   error50x path/to/file
 }
+
 ```
 
 其中，token 需要如下权限：
@@ -43,6 +38,9 @@ gitea {
 - organization:read
 - repository:read
 - user:read
+
+更详细的配置可查看 [Caddyfile](./Caddyfile)
+
 
 ## 使用说明
 

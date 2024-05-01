@@ -9,6 +9,8 @@ import (
 	"sync"
 )
 
+var shared = cmap.New[PageDomain]()
+
 type CustomDomains struct {
 	/// 映射关系
 	Alias *cmap.ConcurrentMap[string, PageDomain] `json:"DomainAlias"`
@@ -18,10 +20,16 @@ type CustomDomains struct {
 	Mutex sync.Mutex `json:"-"`
 	/// 文件落盘
 	Local string `json:"-"`
+	// 是否全局共享
+	Share bool
 }
 
 func (d *CustomDomains) Get(host string) (PageDomain, bool) {
-	return d.Alias.Get(strings.ToLower(host))
+	get, b := d.Alias.Get(strings.ToLower(host))
+	if !b && d.Share {
+		return shared.Get(strings.ToLower(host))
+	}
+	return get, b
 }
 
 func (d *CustomDomains) add(domain *PageDomain, alias string) {
@@ -32,8 +40,14 @@ func (d *CustomDomains) add(domain *PageDomain, alias string) {
 	old, b := d.Reverse.Get(key)
 	if b {
 		// 移除旧的映射关系
+		if d.Share {
+			shared.Remove(old)
+		}
 		d.Alias.Remove(old)
 		d.Reverse.Remove(key)
+	}
+	if d.Share {
+		shared.Set(alias, *domain)
 	}
 	d.Alias.Set(alias, *domain)
 	d.Reverse.Set(key, alias)
@@ -46,7 +60,10 @@ func (d *CustomDomains) add(domain *PageDomain, alias string) {
 	}
 }
 
-func NewCustomDomains(local string) (*CustomDomains, error) {
+func NewCustomDomains(local string, share bool) (*CustomDomains, error) {
+	if share {
+		fmt.Printf("Global Alias Enabled.\n")
+	}
 	stat, err := os.Stat(local)
 	alias := cmap.New[PageDomain]()
 	reverse := cmap.New[string]()
@@ -55,6 +72,7 @@ func NewCustomDomains(local string) (*CustomDomains, error) {
 		Reverse: &reverse,
 		Mutex:   sync.Mutex{},
 		Local:   local,
+		Share:   share,
 	}
 	fmt.Printf("Discover alias file :%s.\n", local)
 	if local != "" && err == nil && !stat.IsDir() {
@@ -67,6 +85,11 @@ func NewCustomDomains(local string) (*CustomDomains, error) {
 
 		if err != nil {
 			return nil, err
+		}
+		if share {
+			for k, v := range result.Alias.Items() {
+				shared.Set(k, v)
+			}
 		}
 	}
 	return result, nil

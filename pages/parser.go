@@ -38,6 +38,10 @@ func (p *PageClient) RouteExists(writer http.ResponseWriter, request *http.Reque
 		return err
 	}
 	config, err := p.parseDomainConfig(domain)
+	if request.Host != config.Alias && p.AutoRedirect {
+		http.Redirect(writer, request, p.ServerProto+"://"+config.Alias, 302)
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -80,10 +84,12 @@ func (p *PageClient) parseDomainConfig(domain *PageDomain) (*DomainConfig, error
 			}
 			return nil, errors.Wrap(err, "unknown error!")
 		}
+		alias = strings.TrimSpace(alias)
+		cache.Alias = alias
 		// 添加映射
-		if strings.TrimSpace(alias) != "" {
+		if alias != "" {
 			p.logger.Info("添加 alias ", zap.String("alias", strings.TrimSpace(alias)))
-			p.DomainAlias.add(domain, strings.TrimSpace(alias))
+			p.DomainAlias.add(domain, alias)
 		}
 		/////////// 检查 404 文件是否存在
 		exists, err := p.FileExists(domain, cache.RootPath+"404.html")

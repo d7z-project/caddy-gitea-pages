@@ -23,6 +23,7 @@ func NewOwnerConfig() *OwnerConfig {
 type DomainConfig struct {
 	RootPath     string
 	NotFoundPath string
+	Alias        string
 }
 
 type PageConfigGroup struct {
