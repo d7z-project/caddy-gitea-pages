@@ -2,6 +2,15 @@
 
 > 参照 Github Pages 实现的 Gitea Pages
 
+## 安装说明
+
+此处需要用到 `xcaddy` 工具，使用如下命令生成 Caddy 执行文件
+
+```bash
+xcaddy build --with git.d7z.net/d7z-project/caddy-gitea-pages
+# 列出当前模块
+./caddy list-modules | grep gitea
+```
 
 ## 配置说明
 
