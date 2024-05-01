@@ -1,0 +1,4 @@
+code.gitea.io/sdk/gitea v0.18.0/go.mod h1:IG9xZJoltDNeDSW0qiF2Vqx5orMWa7OhVWrjvrd5NpI=
+github.com/allegro/bigcache/v3 v3.1.0/go.mod h1:aPyh7jEvrog9zAwx5N7+JUQX5dZTSGpxF1LAR4dr35I=
+github.com/caddyserver/caddy/v2 v2.7.6/go.mod h1:JCiwFMnRWjk8lOa7po0wM/75kwd38ccJPMSrXvQCMQ0=
+github.com/orcaman/concurrent-map/v2 v2.0.1/go.mod h1:9Eq3TG2oBe5FirmYWQfYO5iH1q0Jv47PLaNK++uCdOM=
