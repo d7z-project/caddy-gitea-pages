@@ -50,21 +50,24 @@ func NewCustomDomains(local string) (*CustomDomains, error) {
 	stat, err := os.Stat(local)
 	alias := cmap.New[PageDomain]()
 	reverse := cmap.New[string]()
-	result := CustomDomains{
+	result := &CustomDomains{
 		Alias:   &alias,
 		Reverse: &reverse,
 		Mutex:   sync.Mutex{},
 		Local:   local,
 	}
-	if local != "" && os.IsExist(err) && !stat.IsDir() {
+	fmt.Printf("Discover alias file :%s.\n", local)
+	if local != "" && err == nil && !stat.IsDir() {
 		bytes, err := os.ReadFile(local)
 		if err != nil {
 			return nil, err
 		}
-		err = json.Unmarshal(bytes, &result)
+		err = json.Unmarshal(bytes, result)
+		fmt.Printf("Found %d Alias records.\n", result.Alias.Count())
+
 		if err != nil {
 			return nil, err
 		}
 	}
-	return &result, nil
+	return result, nil
 }
