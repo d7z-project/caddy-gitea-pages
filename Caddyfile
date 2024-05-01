@@ -1,0 +1,10 @@
+{
+        order gitea before file_server
+}
+:3000
+
+   gitea {
+        server https://git.d7z.net
+        token f9691f6794a8ede716978036d3869ea47258f885
+        domain example.com
+    }
