@@ -1,11 +1,19 @@
 {
-        order gitea before file_server
+    order gitea before file_server
 }
-:3000
+:80
 
 gitea {
-   # 请自行替换内容，当前仅为演示
-   server https://git.d7z.net
-   token f9691f6794a8ede716978036d3869ea47258f885
+   # Gitea 服务器地址
+   server https://gitea.com
+   # Gitea Token
+   token please-replace-it
+   # 默认域名，类似于 Github 的 github.io
    domain example.com
+   # CNAME 配置缓存地址
+   alias path/to/file
+   # 默认 404 页面,可填写路径或者 URL
+   error40x path/to/file
+   # 默认 50x 页面,可填写路径或者 URL
+   error50x path/to/file
 }

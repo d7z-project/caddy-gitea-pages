@@ -1,3 +1,4 @@
 /caddy
 /.idea
 *.iml
+/Caddyfile.local
