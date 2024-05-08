@@ -2,6 +2,7 @@ package pages
 
 import (
 	"code.gitea.io/sdk/gitea"
+	"fmt"
 	"github.com/allegro/bigcache/v3"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -22,25 +23,13 @@ func (p *PageClient) Route(writer http.ResponseWriter, request *http.Request) er
 			var buf [4096]byte
 			n := runtime.Stack(buf[:], false)
 			println(string(buf[:n]))
-			return p.ErrorPages.flushErrorPages(http.StatusInternalServerError, writer)
+			return p.ErrorPages.flushError(errors.New(fmt.Sprintf("%v", err)), request, writer)
 		}
 		return nil
 	}()
 	err := p.RouteExists(writer, request)
 	if err != nil {
-		if errors.Is(err, ErrorNotFound) {
-			err := p.ErrorPages.flushErrorPages(http.StatusNotFound, writer)
-			if err != nil {
-				return err
-			}
-			return err
-		} else if !errors.Is(err, ErrorNotMatches) {
-			err := p.ErrorPages.flushErrorPages(http.StatusInternalServerError, writer)
-			if err != nil {
-				return err
-			}
-			return err
-		}
+		return p.ErrorPages.flushError(err, request, writer)
 	}
 	return err
 }

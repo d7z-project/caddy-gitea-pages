@@ -2,15 +2,8 @@ package pages
 
 import (
 	"code.gitea.io/sdk/gitea"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"strings"
-)
-
-var (
-	// ErrorNotMatches 确认这不是 Gitea Pages 相关的域名
-	ErrorNotMatches = errors.New("not matching")
-	ErrorNotFound   = errors.New("not found")
 )
 
 type PageClient struct {

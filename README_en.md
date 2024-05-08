@@ -50,7 +50,7 @@ The repository `https://gitea.com/owner/repo.git` corresponds to `owner.example.
 
 To access the `CNAME` configured domain, you need to access the `<owner>.example.com/<repo>` domain of the repository, which needs to be done only once.
 
-**Note**: You need to have `gh-pages` branch and `CNAME` file in the branch to access the repository, if you still can't access it, you can restart Caddy to clear the cache.
+**Note**: You need to have `gh-pages` branch and `index.html` file in the branch to access the repository, if you still can't access it, you can restart Caddy to clear the cache.
 
 ## Acknowledgments
 

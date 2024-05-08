@@ -2,60 +2,99 @@ package pages
 
 import (
 	"embed"
+	"github.com/Masterminds/sprig/v3"
+	"github.com/pkg/errors"
 	"net/http"
 	"strconv"
+	"text/template"
 )
 
 var (
-	//go:embed 40x.html 50x.html
+	// ErrorNotMatches 确认这不是 Gitea Pages 相关的域名
+	ErrorNotMatches = errors.New("not matching")
+	ErrorNotFound   = errors.New("not found")
+)
+
+type ErrorMetadata struct {
+	StatusCode int
+	Request    *http.Request
+	Error      string
+}
+
+var (
+	//go:embed 40x.gohtml 50x.gohtml
 	embedPages embed.FS
 )
 
 type ErrorPages struct {
-	errorPages map[string]string
+	errorPages map[string]*template.Template
 }
 
-func NewErrorPages(pages map[string]string) (*ErrorPages, error) {
-	if pages == nil {
-		pages = make(map[string]string)
-	}
-	if pages["40x"] == "" {
-		data, err := embedPages.ReadFile("40x.html")
+func newTemplate(key, text string) (*template.Template, error) {
+	return template.New(key).Funcs(sprig.TxtFuncMap()).Parse(text)
+}
+func NewErrorPages(pagesTmpl map[string]string) (*ErrorPages, error) {
+	pages := make(map[string]*template.Template)
+	for key, value := range pagesTmpl {
+		tmpl, err := newTemplate(key, value)
 		if err != nil {
 			return nil, err
 		}
-		pages["40x"] = string(data)
+		pages[key] = tmpl
 	}
-	if pages["50x"] == "" {
-		data, err := embedPages.ReadFile("50x.html")
+
+	if pages["40x"] == nil {
+		data, err := embedPages.ReadFile("40x.gohtml")
 		if err != nil {
 			return nil, err
 		}
-		pages["50x"] = string(data)
+		pages["40x"], err = newTemplate("40x", string(data))
+		if err != nil {
+			return nil, err
+		}
+	}
+	if pages["50x"] == nil {
+		data, err := embedPages.ReadFile("50x.gohtml")
+		if err != nil {
+			return nil, err
+		}
+		pages["50x"], err = newTemplate("50x", string(data))
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &ErrorPages{
 		errorPages: pages,
 	}, nil
 }
 
-func (p *ErrorPages) flushErrorPages(code int, writer http.ResponseWriter) error {
+func (p *ErrorPages) flushError(err error, request *http.Request, writer http.ResponseWriter) error {
+	var code = http.StatusInternalServerError
+	if errors.Is(err, ErrorNotMatches) {
+		// 跳过不匹配
+		return err
+	} else if errors.Is(err, ErrorNotFound) {
+		code = http.StatusNotFound
+	} else {
+		code = http.StatusInternalServerError
+	}
+	var metadata = &ErrorMetadata{
+		StatusCode: code,
+		Request:    request,
+		Error:      err.Error(),
+	}
 	codeStr := strconv.Itoa(code)
-	if result := p.errorPages[codeStr]; result != "" {
-		return flushPages(code, result, writer)
+	writer.Header().Add("Content-Type", "text/html;charset=utf-8")
+	writer.WriteHeader(code)
+	if result := p.errorPages[codeStr]; result != nil {
+		return result.Execute(writer, metadata)
 	}
 	switch {
 	case code >= 400 && code < 500:
-		return flushPages(404, p.errorPages["40x"], writer)
+		return p.errorPages["40x"].Execute(writer, metadata)
 	case code >= 500:
-		return flushPages(502, p.errorPages["50x"], writer)
+		return p.errorPages["50x"].Execute(writer, metadata)
 	default:
-		return flushPages(502, p.errorPages["50x"], writer)
+		return p.errorPages["50x"].Execute(writer, metadata)
 	}
-}
-
-func flushPages(code int, page string, writer http.ResponseWriter) error {
-	writer.Header().Add("Content-Type", "text/html;charset=utf-8")
-	writer.WriteHeader(code)
-	_, err := writer.Write([]byte(page))
-	return err
 }
