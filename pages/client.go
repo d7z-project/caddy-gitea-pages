@@ -43,7 +43,7 @@ func NewPageClient(
 	if err != nil {
 		return nil, err
 	}
-	pages, err := NewErrorPages(config.Error40xPage, config.Error50xPage)
+	pages, err := NewErrorPages(config.ErrorPages)
 	if err != nil {
 		return nil, err
 	}

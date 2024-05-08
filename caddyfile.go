@@ -9,7 +9,10 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"io"
 	"net/http"
+	"os"
+	"strings"
 )
 
 func init() {
@@ -34,18 +37,58 @@ func (m *Middleware) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				d.Args(&m.Config.Alias)
 			case "shared":
 				m.Config.SharedAlias = true
-			case "error40x":
-				d.Args(&m.Config.Error40xPage)
-			case "error50x":
-				d.Args(&m.Config.Error50xPage)
+			case "errors":
+				if d.NextArg() {
+					return d.ArgErr()
+				}
+				for nesting := d.Nesting(); d.NextBlock(nesting); {
+					args := []string{d.Val()}
+					args = append(args, d.RemainingArgs()...)
+					if len(args) != 2 {
+						return d.Errf("expected 2 arguments, got %d", len(args))
+					}
+					body, err := parseBody(args[1])
+					if err != nil {
+						return d.Errf("failed to parse %s: %v", args[0], err)
+					}
+					if m.Config.ErrorPages == nil {
+						m.Config.ErrorPages = make(map[string]string)
+					}
+					m.Config.ErrorPages[strings.ToLower(args[0])] = body
+				}
 			case "redirect":
 				m.Config.AutoRedirect = true
 			case "proto":
 				d.Args(&m.Config.ServerProto)
+			default:
+				return d.Errf("unrecognized subdirective '%s'", d.Val())
 			}
 		}
 	}
 	return nil
+}
+
+func parseBody(path string) (string, error) {
+	fileData, err := os.ReadFile(path)
+	if err == nil {
+		return string(fileData), nil
+	} else if strings.HasPrefix(path, "http://") ||
+		strings.HasPrefix(path, "https://") {
+		resp, err := http.Get(path)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return "", errors.New(resp.Status)
+		}
+		all, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", err
+		}
+		return string(all), nil
+	}
+	return "", err
 }
 
 func parseCaddyfile(middleware *Middleware) func(httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
@@ -72,6 +115,7 @@ func (m *Middleware) ServeHTTP(
 	request *http.Request,
 	handler caddyhttp.Handler,
 ) error {
+
 	type stackTracer interface {
 		StackTrace() errors.StackTrace
 	}

@@ -1,100 +1,61 @@
 package pages
 
 import (
-	"github.com/pkg/errors"
-	"io"
+	"embed"
 	"net/http"
-	"os"
-	"strings"
+	"strconv"
+)
+
+var (
+	//go:embed 40x.html 50x.html
+	embedPages embed.FS
 )
 
 type ErrorPages struct {
-	Error40xTemplate string
-	Error50xTemplate string
+	errorPages map[string]string
 }
 
-func NewErrorPages(e40xPath, e50xPath string) (*ErrorPages, error) {
-	var e40x = Default40xTemplate
-	var e50x = Default50xTemplate
-	var err error
-	if e40xPath != "" {
-		e40x, err = getTemplate(e40xPath)
-		if err != nil {
-			return nil, err
-		}
+func NewErrorPages(pages map[string]string) (*ErrorPages, error) {
+	if pages == nil {
+		pages = make(map[string]string)
 	}
-	if e50xPath != "" {
-		e50x, err = getTemplate(e50xPath)
+	if pages["40x"] == "" {
+		data, err := embedPages.ReadFile("40x.html")
 		if err != nil {
 			return nil, err
 		}
+		pages["40x"] = string(data)
+	}
+	if pages["50x"] == "" {
+		data, err := embedPages.ReadFile("50x.html")
+		if err != nil {
+			return nil, err
+		}
+		pages["50x"] = string(data)
 	}
 	return &ErrorPages{
-		Error40xTemplate: e40x,
-		Error50xTemplate: e50x,
+		errorPages: pages,
 	}, nil
 }
 
-func getTemplate(path string) (string, error) {
-	fileData, err := os.ReadFile(path)
-	if err == nil {
-		return string(fileData), nil
-	} else if strings.HasPrefix(path, "http://") ||
-		strings.HasPrefix(path, "https://") {
-		resp, err := http.Get(path)
-		if err != nil {
-			return "", err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return "", errors.New(resp.Status)
-		}
-		all, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", err
-		}
-		return string(all), nil
+func (p *ErrorPages) flushErrorPages(code int, writer http.ResponseWriter) error {
+	codeStr := strconv.Itoa(code)
+	if result := p.errorPages[codeStr]; result != "" {
+		return flushPages(code, result, writer)
 	}
-	return "", err
+	switch {
+	case code >= 400 && code < 500:
+		return flushPages(404, p.errorPages["40x"], writer)
+	case code >= 500:
+		return flushPages(502, p.errorPages["50x"], writer)
+	default:
+		return flushPages(502, p.errorPages["50x"], writer)
+	}
 }
 
-func (p *ErrorPages) flush40xError(writer http.ResponseWriter) error {
+func flushPages(code int, page string, writer http.ResponseWriter) error {
 	writer.Header().Add("Content-Type", "text/html;charset=utf-8")
-	writer.WriteHeader(http.StatusNotFound)
-	_, err := writer.Write([]byte(p.Error40xTemplate))
+	writer.WriteHeader(code)
+	_, err := writer.Write([]byte(page))
 	return err
 }
-
-func (p *ErrorPages) flush50xError(writer http.ResponseWriter) error {
-	writer.Header().Add("Content-Type", "text/html;charset=utf-8")
-	writer.WriteHeader(http.StatusInternalServerError)
-	_, err := writer.Write([]byte(p.Error50xTemplate))
-	return err
-}
-
-const Default40xTemplate = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-             <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
-                         <meta http-equiv="X-UA-Compatible" content="ie=edge">
-             <title>404 Not Found</title>
-</head>
-<Body>
-<div style="text-align: center;"><h1>404 Not Found</h1></div>
-<hr><div style="text-align: center;">Caddy</div>
-</Body>
-</html>`
-const Default50xTemplate = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-             <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
-                         <meta http-equiv="X-UA-Compatible" content="ie=edge">
-             <title>404 Not Found</title>
-</head>
-<Body>
-<div style="text-align: center;"><h1>404 Not Found</h1></div>
-<hr><div style="text-align: center;">Caddy</div>
-</Body>
-</html>`

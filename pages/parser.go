@@ -9,20 +9,33 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"runtime"
 	"strings"
 )
 
 func (p *PageClient) Route(writer http.ResponseWriter, request *http.Request) error {
+	defer func() error {
+		//放在匿名函数里,err捕获到错误信息，并且输出
+		err := recover()
+		if err != nil {
+			p.logger.Error("recovered from panic", zap.Any("err", err))
+			var buf [4096]byte
+			n := runtime.Stack(buf[:], false)
+			println(string(buf[:n]))
+			return p.ErrorPages.flushErrorPages(http.StatusInternalServerError, writer)
+		}
+		return nil
+	}()
 	err := p.RouteExists(writer, request)
 	if err != nil {
 		if errors.Is(err, ErrorNotFound) {
-			err := p.ErrorPages.flush40xError(writer)
+			err := p.ErrorPages.flushErrorPages(http.StatusNotFound, writer)
 			if err != nil {
 				return err
 			}
 			return err
 		} else if !errors.Is(err, ErrorNotMatches) {
-			err := p.ErrorPages.flush50xError(writer)
+			err := p.ErrorPages.flushErrorPages(http.StatusInternalServerError, writer)
 			if err != nil {
 				return err
 			}
@@ -38,6 +51,9 @@ func (p *PageClient) RouteExists(writer http.ResponseWriter, request *http.Reque
 		return err
 	}
 	config, err := p.parseDomainConfig(domain)
+	if err != nil {
+		return err
+	}
 	if request.Host != config.Alias && p.AutoRedirect {
 		http.Redirect(writer, request, p.ServerProto+"://"+config.Alias, 302)
 		return nil
@@ -76,19 +92,30 @@ func (p *PageClient) parseDomainConfig(domain *PageDomain) (*DomainConfig, error
 			return p.pagesConfig.setDomainConfig(domain, cache)
 		}()
 		/////////// 处理 CNAME
+		fileExists, err := p.FileExists(domain, "index.html")
+		if err != nil {
+			return nil, errors.Wrap(err, "could not check index.html")
+		}
+		if !fileExists {
+			// 不是可用的仓库
+			return nil, ErrorNotFound
+		}
 		alias, err := p.ReadStringRepoFile(domain, "CNAME")
 		if err != nil {
 			// 这不是一个可用的仓库
-			if errors.Is(err, ErrorNotFound) {
+			if !errors.Is(err, ErrorNotFound) {
 				return nil, err
 			}
-			return nil, errors.Wrap(err, "unknown error!")
+			alias = ""
 		}
 		alias = strings.TrimSpace(alias)
+		alias = strings.TrimPrefix(strings.TrimPrefix(alias, "https://"), "http://")
+		alias = strings.Split(alias, "/")[0]
+
 		cache.Alias = alias
 		// 添加映射
 		if alias != "" {
-			p.logger.Info("添加 alias ", zap.String("alias", strings.TrimSpace(alias)))
+			p.logger.Info("添加 alias ", zap.String("alias", alias))
 			p.DomainAlias.add(domain, alias)
 		}
 		/////////// 检查 404 文件是否存在

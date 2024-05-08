@@ -14,10 +14,19 @@
    alias path/to/file
    # 在 caddy 实例中共享 Alias
    shared
-   # 默认 404 页面,可填写路径或者 URL
-   error40x path/to/file
-   # 默认 50x 页面,可填写路径或者 URL
-   error50x path/to/file
+   errors {
+     # 默认 404 页面,可填写路径或者 URL
+     404 path/to/file
+
+     # 默认 40x 页面,可填写路径或者 URL
+     40x path/to/file
+
+     # 默认 50x 页面,可填写路径或者 URL
+     50x path/to/file
+
+     # 默认 500 页面,可填写路径或者 URL
+     500 path/to/file
+   }
    # 自动重定向到 CNAME 配置
    redirect
    # 指定协议，可选 http/https (重定向用)

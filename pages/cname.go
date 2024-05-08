@@ -21,7 +21,7 @@ type CustomDomains struct {
 	/// 文件落盘
 	Local string `json:"-"`
 	// 是否全局共享
-	Share bool
+	Share bool `json:"-"`
 }
 
 func (d *CustomDomains) Get(host string) (PageDomain, bool) {
