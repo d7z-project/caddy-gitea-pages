@@ -3,20 +3,36 @@ package pages
 import (
 	"code.gitea.io/sdk/gitea"
 	"go.uber.org/zap"
+	"strconv"
 	"strings"
 )
 
+type AutoRedirect struct {
+	Enabled bool
+	Scheme  string
+	Code    int
+}
+
 type PageClient struct {
-	Server       string
-	Token        string
-	BaseDomain   string
-	client       *gitea.Client
-	DomainAlias  *CustomDomains
-	pagesConfig  *PageConfigGroup
-	ErrorPages   *ErrorPages
-	AutoRedirect bool
-	ServerProto  string
-	logger       *zap.Logger
+	BaseDomain       string
+	GiteaConfig      *GiteaConfig
+	DomainAlias      *CustomDomains
+	ErrorPages       *ErrorPages
+	AutoRedirect     *AutoRedirect
+	OwnerCache       *OwnerCache
+	DomainCache      *DomainCache
+	logger           *zap.Logger
+	FileMaxCacheSize int
+}
+
+func (p *PageClient) Close() error {
+	if p.OwnerCache != nil {
+		_ = p.OwnerCache.Close()
+	}
+	if p.DomainCache != nil {
+		_ = p.DomainCache.Close()
+	}
+	return nil
 }
 
 func NewPageClient(
@@ -40,25 +56,33 @@ func NewPageClient(
 	if err != nil {
 		return nil, err
 	}
+	ownerCache := NewOwnerCache(config.CacheTimeout)
+	giteaConfig := &GiteaConfig{
+		Server: config.Server,
+		Token:  config.Token,
+		Client: client,
+		Logger: logger,
+	}
+	domainCache := NewDomainCache(config.CacheTimeout)
+	logger.Info("gitea cache ttl " + strconv.FormatInt(config.CacheTimeout.Milliseconds(), 10) + " ms .")
 	return &PageClient{
-		Server:       config.Server,
-		Token:        config.Token,
-		BaseDomain:   "." + strings.Trim(config.Domain, "."),
-		client:       client,
-		DomainAlias:  alias,
-		pagesConfig:  NewDomainConfig(),
-		ErrorPages:   pages,
-		logger:       logger,
-		AutoRedirect: config.AutoRedirect,
-		ServerProto:  config.ServerProto,
+		GiteaConfig:      giteaConfig,
+		BaseDomain:       "." + strings.Trim(config.Domain, "."),
+		DomainAlias:      alias,
+		ErrorPages:       pages,
+		logger:           logger,
+		AutoRedirect:     config.AutoRedirect,
+		DomainCache:      &domainCache,
+		OwnerCache:       &ownerCache,
+		FileMaxCacheSize: config.CacheMaxSize,
 	}, nil
 }
 
 func (p *PageClient) Validate() error {
-	ver, _, err := p.client.ServerVersion()
+	ver, _, err := p.GiteaConfig.Client.ServerVersion()
 	p.logger.Info("Gitea Version ", zap.String("version", ver))
 	if err != nil {
-		return err
+		p.logger.Warn("Failed to get Gitea version", zap.Error(err))
 	}
 	return nil
 }

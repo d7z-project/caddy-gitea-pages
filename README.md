@@ -37,9 +37,9 @@ gitea {
 
 其中，token 需要如下权限：
 
-- organization:read
-- repository:read
-- user:read
+- `organization:read`
+- `repository:read`
+- `user:read`
 
 更详细的配置可查看 [Caddyfile](./Caddyfile)
 
@@ -51,6 +51,12 @@ gitea {
 如需访问 `CNAME` 配置的域名，则需要先访问仓库对应的 `<owner>.example.com/<repo>` 域名, 此操作只需完成一次。
 
 **注意**： 需要仓库存在 `gh-pages` 分支和分支内存在 `index.html` 文件才可访问，如果配置后仍无法访问可重启 Caddy 来清理缓存。
+
+## TODO
+
+- [x] 支持 CNAME
+- [x] 支持内容缓存
+- [ ] 支持 oauth2 登录访问私有页面
 
 ## 致谢
 

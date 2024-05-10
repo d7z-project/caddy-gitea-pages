@@ -3,9 +3,9 @@ package pages
 import "fmt"
 
 type PageDomain struct {
-	Owner  string
-	Repo   string
-	Branch string
+	Owner  string `json:"owner"`
+	Repo   string `json:"repo"`
+	Branch string `json:"branch"`
 }
 
 func NewPageDomain(owner string, repo string, branch string) *PageDomain {
@@ -16,6 +16,6 @@ func NewPageDomain(owner string, repo string, branch string) *PageDomain {
 	}
 }
 
-func (p *PageDomain) key() string {
+func (p *PageDomain) Key() string {
 	return fmt.Sprintf("%s|%s|%s", p.Owner, p.Repo, p.Branch)
 }

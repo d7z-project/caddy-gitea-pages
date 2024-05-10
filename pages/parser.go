@@ -1,145 +1,31 @@
 package pages
 
 import (
-	"code.gitea.io/sdk/gitea"
 	"fmt"
-	"github.com/allegro/bigcache/v3"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"io"
-	"mime"
 	"net/http"
-	"path"
-	"runtime"
 	"strings"
 )
-
-func (p *PageClient) Route(writer http.ResponseWriter, request *http.Request) error {
-	defer func() error {
-		//放在匿名函数里,err捕获到错误信息，并且输出
-		err := recover()
-		if err != nil {
-			p.logger.Error("recovered from panic", zap.Any("err", err))
-			var buf [4096]byte
-			n := runtime.Stack(buf[:], false)
-			println(string(buf[:n]))
-			return p.ErrorPages.flushError(errors.New(fmt.Sprintf("%v", err)), request, writer)
-		}
-		return nil
-	}()
-	err := p.RouteExists(writer, request)
-	if err != nil {
-		return p.ErrorPages.flushError(err, request, writer)
-	}
-	return err
-}
-
-func (p *PageClient) RouteExists(writer http.ResponseWriter, request *http.Request) error {
-	domain, filePath, err := p.parseDomain(request)
-	if err != nil {
-		return err
-	}
-	config, err := p.parseDomainConfig(domain)
-	if err != nil {
-		return err
-	}
-	if request.Host != config.Alias && p.AutoRedirect {
-		http.Redirect(writer, request, p.ServerProto+"://"+config.Alias, 302)
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	context, err := p.OpenFileContext(domain, config.RootPath+filePath)
-	if errors.Is(err, ErrorNotFound) && config.NotFoundPath != "" {
-		context, err = p.OpenFileContext(domain, config.RootPath+config.NotFoundPath)
-	}
-	if err != nil {
-		return err
-	}
-	contentType := context.Header.Get("Content-Type")
-	if contentType != "application/octet-stream" {
-		contentType = mime.TypeByExtension(path.Ext(filePath))
-	}
-	writer.Header().Add("Content-Type", contentType)
-	writer.WriteHeader(http.StatusOK)
-	defer context.Body.Close()
-	_, err = io.Copy(writer, context.Body)
-	return err
-}
-
-func (p *PageClient) parseDomainConfig(domain *PageDomain) (*DomainConfig, error) {
-	unlock := p.pagesConfig.locker.LockAny(domain.key())
-	defer unlock()
-	cache, err := p.pagesConfig.getDomainConfig(domain)
-	if errors.Is(err, bigcache.ErrEntryNotFound) {
-		cache = &DomainConfig{
-			RootPath:     "",
-			NotFoundPath: "index.html",
-		}
-		defer func() error {
-			return p.pagesConfig.setDomainConfig(domain, cache)
-		}()
-		/////////// 处理 CNAME
-		fileExists, err := p.FileExists(domain, "index.html")
-		if err != nil {
-			return nil, errors.Wrap(err, "could not check index.html")
-		}
-		if !fileExists {
-			// 不是可用的仓库
-			return nil, ErrorNotFound
-		}
-		alias, err := p.ReadStringRepoFile(domain, "CNAME")
-		if err != nil {
-			// 这不是一个可用的仓库
-			if !errors.Is(err, ErrorNotFound) {
-				return nil, err
-			}
-			alias = ""
-		}
-		alias = strings.TrimSpace(alias)
-		alias = strings.TrimPrefix(strings.TrimPrefix(alias, "https://"), "http://")
-		alias = strings.Split(alias, "/")[0]
-
-		cache.Alias = alias
-		// 添加映射
-		if alias != "" {
-			p.logger.Info("添加 alias ", zap.String("alias", alias))
-			p.DomainAlias.add(domain, alias)
-		}
-		/////////// 检查 404 文件是否存在
-		exists, err := p.FileExists(domain, cache.RootPath+"404.html")
-		if err != nil {
-			return nil, err
-		}
-		if exists {
-			cache.NotFoundPath = "404.html"
-		}
-		//////////
-
-	} else if err != nil {
-		return nil, err
-	}
-	return cache, nil
-}
 
 func (p *PageClient) parseDomain(request *http.Request) (*PageDomain, string, error) {
 	// TODO: 处理 IPv6 Host:Port 的问题
 	host := strings.Split(request.Host, ":")[0]
 	filePath := request.URL.Path
-	if strings.HasSuffix(filePath, "/") {
-		filePath = filePath + "index.html"
-	}
 	pathTrim := strings.Split(strings.Trim(filePath, "/"), "/")
+	repo := pathTrim[0]
+	// 处理 scheme://domain/path 的情况
+	if !strings.HasPrefix(filePath, fmt.Sprintf("/%s/", repo)) {
+		repo = ""
+	}
 	if strings.HasSuffix(host, p.BaseDomain) {
 		child := strings.Split(strings.TrimSuffix(host, p.BaseDomain), ".")
 		result := NewPageDomain(
 			child[len(child)-1],
-			pathTrim[0],
+			repo,
 			"gh-pages",
 		)
 		// 处于使用默认 Domain 下
-		config, err := p.getOwnerConfig(result.Owner)
+		config, err := p.OwnerCache.GetOwnerConfig(p.GiteaConfig, result.Owner)
 		if err != nil {
 			return nil, "", err
 		}
@@ -167,44 +53,4 @@ func (p *PageClient) parseDomain(request *http.Request) (*PageDomain, string, er
 			return nil, "", errors.Wrap(ErrorNotFound, "")
 		}
 	}
-}
-
-func (p *PageClient) getOwnerConfig(owner string) (*OwnerConfig, error) {
-	unlock := p.pagesConfig.locker.LockAny(owner)
-	defer unlock()
-	cache, err := p.pagesConfig.GetOwnerCache(owner)
-	if errors.Is(err, bigcache.ErrEntryNotFound) {
-		// not exists
-		cache = NewOwnerConfig()
-		defer func() error {
-			return p.pagesConfig.setOwnConfig(owner, cache)
-		}()
-		//////////////// 列出组织下所有仓库
-		repos, resp, err := p.client.ListOrgRepos(owner, gitea.ListOrgReposOptions{
-			ListOptions: gitea.ListOptions{
-				PageSize: 999,
-			},
-		})
-		if err != nil && resp.StatusCode == http.StatusNotFound {
-			// 调用用户接口查询
-			repos, resp, err = p.client.ListUserRepos(owner, gitea.ListReposOptions{
-				ListOptions: gitea.ListOptions{
-					PageSize: 999,
-				},
-			})
-			if err != nil {
-				return nil, errors.Wrap(err, "")
-			}
-		} else if err != nil {
-			return nil, err
-		}
-		for _, repo := range repos {
-			cache.Repos[repo.Name] = true
-			cache.LowerRepos[strings.ToLower(repo.Name)] = true
-		}
-		////////////////////
-	} else if err != nil {
-		return nil, err
-	}
-	return cache, nil
 }

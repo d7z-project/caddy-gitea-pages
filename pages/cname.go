@@ -13,9 +13,9 @@ var shared = cmap.New[PageDomain]()
 
 type CustomDomains struct {
 	/// 映射关系
-	Alias *cmap.ConcurrentMap[string, PageDomain] `json:"DomainAlias"`
+	Alias *cmap.ConcurrentMap[string, PageDomain] `json:"alias,omitempty"`
 	/// 反向链接
-	Reverse *cmap.ConcurrentMap[string, string] `json:"reverse"`
+	Reverse *cmap.ConcurrentMap[string, string] `json:"reverse,omitempty"`
 	/// 写锁
 	Mutex sync.Mutex `json:"-"`
 	/// 文件落盘
@@ -32,25 +32,27 @@ func (d *CustomDomains) Get(host string) (PageDomain, bool) {
 	return get, b
 }
 
-func (d *CustomDomains) add(domain *PageDomain, alias string) {
+func (d *CustomDomains) add(domain *PageDomain, aliases ...string) {
 	d.Mutex.Lock()
 	defer d.Mutex.Unlock()
-	key := strings.ToLower(domain.key())
-	alias = strings.ToLower(alias)
-	old, b := d.Reverse.Get(key)
-	if b {
-		// 移除旧的映射关系
-		if d.Share {
-			shared.Remove(old)
+	for _, alias := range aliases {
+		key := strings.ToLower(domain.Key())
+		alias = strings.ToLower(alias)
+		old, b := d.Reverse.Get(key)
+		if b {
+			// 移除旧的映射关系
+			if d.Share {
+				shared.Remove(old)
+			}
+			d.Alias.Remove(old)
+			d.Reverse.Remove(key)
 		}
-		d.Alias.Remove(old)
-		d.Reverse.Remove(key)
+		if d.Share {
+			shared.Set(alias, *domain)
+		}
+		d.Alias.Set(alias, *domain)
+		d.Reverse.Set(key, alias)
 	}
-	if d.Share {
-		shared.Set(alias, *domain)
-	}
-	d.Alias.Set(alias, *domain)
-	d.Reverse.Set(key, alias)
 	if d.Local != "" {
 		marshal, err := json.Marshal(d)
 		err = os.WriteFile(d.Local, marshal, 0644)

@@ -9,12 +9,6 @@ import (
 	"text/template"
 )
 
-var (
-	// ErrorNotMatches 确认这不是 Gitea Pages 相关的域名
-	ErrorNotMatches = errors.New("not matching")
-	ErrorNotFound   = errors.New("not found")
-)
-
 type ErrorMetadata struct {
 	StatusCode int
 	Request    *http.Request

@@ -6,14 +6,14 @@
 (default) {
    # Gitea 服务器地址
    server https://gitea.com
-   # Gitea Token
+   # Gitea Token，需要 organization:read、repository:read、user:read 权限
    token please-replace-it
    # 默认域名，类似于 Github 的 github.io
    domain example.com
-   # CNAME 配置缓存地址
-   alias path/to/file
-   # 在 caddy 实例中共享 Alias
-   shared
+   # CNAME 配置缓存地址 [shared]: 在 caddy 实例中共享 Alias
+   alias path/to/file shared
+   # 配置缓存 (缓存时间 ，最大单文件缓存大小)
+   cache 10s 1KB
    errors {
      # 默认 404 页面,可填写路径或者 URL
      404 path/to/file
@@ -27,10 +27,8 @@
      # 默认 500 页面,可填写路径或者 URL
      500 path/to/file
    }
-   # 自动重定向到 CNAME 配置
-   redirect
-   # 指定协议，可选 http/https (重定向用)
-   proto https
+   # 开启重定向 scheme port
+   redirect https 302
 }
 
 http:// {

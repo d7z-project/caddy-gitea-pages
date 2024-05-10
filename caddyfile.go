@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"git.d7z.net/d7z-project/caddy-gitea-pages/pages"
+	"github.com/alecthomas/units"
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
@@ -12,7 +13,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func init() {
@@ -31,12 +34,35 @@ func (m *Middleware) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				d.Args(&m.Config.Server)
 			case "token":
 				d.Args(&m.Config.Token)
+			case "cache":
+				remainingArgs := d.RemainingArgs()
+				if len(remainingArgs) != 2 {
+					return d.Errf("expected 2 argument for 'cache'; got %v", remainingArgs)
+				}
+				var err error
+				m.Config.CacheTimeout, err = time.ParseDuration(remainingArgs[0])
+				if err != nil {
+					return d.Errf("invalid duration: %v", err)
+				}
+				size, err := units.ParseBase2Bytes(remainingArgs[1])
+				if err != nil {
+					return d.Errf("invalid CacheSize: %v", err)
+				}
+				m.Config.CacheMaxSize = int(size)
 			case "domain":
 				d.Args(&m.Config.Domain)
 			case "alias":
-				d.Args(&m.Config.Alias)
-			case "shared":
-				m.Config.SharedAlias = true
+				remainingArgs := d.RemainingArgs()
+				if len(remainingArgs) == 0 {
+					return d.Errf("expected 2 argument for 'alias'; got %v", remainingArgs)
+				}
+				if len(remainingArgs) == 1 {
+					m.Config.Alias = remainingArgs[0]
+				}
+				if len(remainingArgs) == 2 && remainingArgs[1] == "shared" {
+					m.Config.Alias = remainingArgs[0]
+					m.Config.SharedAlias = true
+				}
 			case "errors":
 				if d.NextArg() {
 					return d.ArgErr()
@@ -57,9 +83,19 @@ func (m *Middleware) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					m.Config.ErrorPages[strings.ToLower(args[0])] = body
 				}
 			case "redirect":
-				m.Config.AutoRedirect = true
-			case "proto":
-				d.Args(&m.Config.ServerProto)
+				remainingArgs := d.RemainingArgs()
+				if len(remainingArgs) != 2 {
+					return d.Errf("expected 2 arguments, got %d", len(remainingArgs))
+				}
+				code, err := strconv.Atoi(remainingArgs[1])
+				if err != nil {
+					return d.WrapErr(err)
+				}
+				m.Config.AutoRedirect = &pages.AutoRedirect{
+					Enabled: true,
+					Scheme:  remainingArgs[0],
+					Code:    code,
+				}
 			default:
 				return d.Errf("unrecognized subdirective '%s'", d.Val())
 			}
@@ -97,8 +133,16 @@ func parseCaddyfile(middleware *Middleware) func(httpcaddyfile.Helper) (caddyhtt
 		if err != nil {
 			return nil, err
 		}
-		if middleware.Config.ServerProto == "" {
-			middleware.Config.ServerProto = "http"
+		if middleware.Config.AutoRedirect == nil {
+			middleware.Config.AutoRedirect = &pages.AutoRedirect{
+				Enabled: false,
+			}
+		}
+		if middleware.Config.CacheTimeout <= 0 {
+			middleware.Config.CacheTimeout = 3 * time.Minute
+		}
+		if middleware.Config.CacheMaxSize <= 0 {
+			middleware.Config.CacheMaxSize = 3 * 1024 * 1024
 		}
 		return middleware, nil
 	}
@@ -144,8 +188,12 @@ func (m *Middleware) CaddyModule() caddy.ModuleInfo {
 }
 
 func (m *Middleware) Validate() error {
-	err := m.Client.Validate()
-	return err
+	return m.Client.Validate()
+}
+
+func (m *Middleware) Cleanup() error {
+	m.Logger.Info("cleaning up gitea middleware.")
+	return m.Client.Close()
 }
 
 func (m *Middleware) Provision(ctx caddy.Context) error {
@@ -163,6 +211,7 @@ func (m *Middleware) Provision(ctx caddy.Context) error {
 
 var (
 	_ caddy.Provisioner           = (*Middleware)(nil)
+	_ caddy.CleanerUpper          = (*Middleware)(nil)
 	_ caddy.Validator             = (*Middleware)(nil)
 	_ caddyhttp.MiddlewareHandler = (*Middleware)(nil)
 	_ caddyfile.Unmarshaler       = (*Middleware)(nil)
