@@ -73,7 +73,6 @@ func NewDomainCache(ttl time.Duration) DomainCache {
 }
 
 func fetch(client *GiteaConfig, domain *PageDomain, result *DomainConfig) error {
-
 	branches, resp, err := client.Client.ListRepoBranches(domain.Owner, domain.Repo,
 		gitea.ListRepoBranchesOptions{
 			ListOptions: gitea.ListOptions{
@@ -194,6 +193,9 @@ func (receiver *DomainConfig) Copy(
 	data, err := receiver.FileCache.Get(path)
 	if err == nil {
 		cacheInfo.MODE = "HIT"
+		for k, v := range client.CustomHeaders {
+			writer.Header().Set(k, v)
+		}
 		writer.Header().Set("ETag", pathTag)
 		writer.Header().Set("Pages-Server-Cache", cacheInfo.raw())
 		writer.Header().Set("Content-Length", strconv.Itoa(len(data)))
@@ -221,6 +223,9 @@ func (receiver *DomainConfig) Copy(
 		}
 		if skipCache {
 			cacheInfo.MODE = "SKIP"
+		}
+		for k, v := range client.CustomHeaders {
+			writer.Header().Set(k, v)
 		}
 		writer.Header().Set("ETag", pathTag)
 		writer.Header().Set("Pages-Server-Cache", cacheInfo.raw())

@@ -63,6 +63,21 @@ func (m *Middleware) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					m.Config.Alias = remainingArgs[0]
 					m.Config.SharedAlias = true
 				}
+			case "headers":
+				if d.NextArg() {
+					return d.ArgErr()
+				}
+				for nesting := d.Nesting(); d.NextBlock(nesting); {
+					args := []string{d.Val()}
+					args = append(args, d.RemainingArgs()...)
+					if len(args) != 2 {
+						return d.Errf("expected 2 arguments, got %d", len(args))
+					}
+					if m.Config.CustomHeaders == nil {
+						m.Config.CustomHeaders = make(map[string]string)
+					}
+					m.Config.CustomHeaders[args[0]] = args[1]
+				}
 			case "errors":
 				if d.NextArg() {
 					return d.ArgErr()
@@ -132,6 +147,12 @@ func parseCaddyfile(middleware *Middleware) func(httpcaddyfile.Helper) (caddyhtt
 		err := middleware.UnmarshalCaddyfile(h.Dispenser)
 		if err != nil {
 			return nil, err
+		}
+		if middleware.Config.ErrorPages == nil {
+			middleware.Config.ErrorPages = make(map[string]string)
+		}
+		if middleware.Config.CustomHeaders == nil {
+			middleware.Config.CustomHeaders = make(map[string]string)
 		}
 		if middleware.Config.AutoRedirect == nil {
 			middleware.Config.AutoRedirect = &pages.AutoRedirect{

@@ -58,10 +58,11 @@ func NewPageClient(
 	}
 	ownerCache := NewOwnerCache(config.CacheTimeout)
 	giteaConfig := &GiteaConfig{
-		Server: config.Server,
-		Token:  config.Token,
-		Client: client,
-		Logger: logger,
+		Server:        config.Server,
+		Token:         config.Token,
+		Client:        client,
+		Logger:        logger,
+		CustomHeaders: config.CustomHeaders,
 	}
 	domainCache := NewDomainCache(config.CacheTimeout)
 	logger.Info("gitea cache ttl " + strconv.FormatInt(config.CacheTimeout.Milliseconds(), 10) + " ms .")

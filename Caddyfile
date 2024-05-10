@@ -14,6 +14,10 @@
    alias path/to/file shared
    # 配置缓存 (缓存时间 ，最大单文件缓存大小)
    cache 10s 1KB
+   # 默认 返回 Header，可以配置同源策略或更多内容
+   headers {
+      Access-Control-Allow-Origin  *
+   }
    errors {
      # 默认 404 页面,可填写路径或者 URL
      404 path/to/file

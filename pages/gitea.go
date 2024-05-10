@@ -11,10 +11,11 @@ import (
 )
 
 type GiteaConfig struct {
-	Server string        `json:"server"`
-	Token  string        `json:"token"`
-	Client *gitea.Client `json:"-"`
-	Logger *zap.Logger   `json:"-"`
+	Server        string            `json:"server"`
+	Token         string            `json:"token"`
+	Client        *gitea.Client     `json:"-"`
+	Logger        *zap.Logger       `json:"-"`
+	CustomHeaders map[string]string `json:"custom_headers"`
 }
 
 func (c *GiteaConfig) FileExists(domain *PageDomain, path string) (bool, error) {

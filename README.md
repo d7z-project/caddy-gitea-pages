@@ -56,6 +56,7 @@ gitea {
 
 - [x] 支持 CNAME
 - [x] 支持内容缓存
+- [ ] 支持 Http Range 断点续传
 - [ ] 支持 oauth2 登录访问私有页面
 
 ## 致谢
