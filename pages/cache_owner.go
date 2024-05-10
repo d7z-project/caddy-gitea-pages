@@ -55,8 +55,10 @@ func getOwner(giteaConfig *GiteaConfig, owner string) (*OwnerConfig, error) {
 				PageSize: 999,
 			},
 		})
-		if err != nil {
-			return nil, errors.Wrap(err, "")
+		if err != nil && resp.StatusCode == http.StatusNotFound {
+			return nil, errors.Wrap(ErrorNotFound, err.Error())
+		} else if err != nil {
+			return nil, err
 		}
 	} else if err != nil {
 		return nil, err
