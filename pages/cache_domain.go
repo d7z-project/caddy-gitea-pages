@@ -10,6 +10,7 @@ import (
 	"github.com/allegro/bigcache/v3"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"io"
 	"mime"
 	"net/http"
@@ -41,10 +42,11 @@ type DomainConfig struct {
 	Exists     bool               // 当前项目是否为 Pages
 	FileCache  *bigcache.BigCache // 文件缓存
 
-	CNAME    []string // 重定向地址
-	SHA      string   // 缓存 SHA
-	BasePath string   // 根目录
-	Topics   []string // 存储库标记
+	CNAME    []string        // 重定向地址
+	SHA      string          // 缓存 SHA
+	DATE     time.Time       // 文件提交时间
+	BasePath string          // 根目录
+	Topics   map[string]bool // 存储库标记
 
 	Index    string //默认页面
 	NotFound string //不存在页面
@@ -52,6 +54,9 @@ type DomainConfig struct {
 
 func (receiver *DomainConfig) Close() error {
 	return receiver.FileCache.Close()
+}
+func (receiver *DomainConfig) IsRoutePage() bool {
+	return receiver.Topics["routes-history"] || receiver.Topics["routes-hash"]
 }
 
 func NewDomainCache(ttl time.Duration) DomainCache {
@@ -100,7 +105,11 @@ func fetch(client *GiteaConfig, domain *PageDomain, result *DomainConfig) error 
 		return errors.Wrap(ErrorNotFound, "branch not found")
 	}
 	currentSHA := branches[branchIndex].Commit.ID
-	result.Topics = topics
+	commitTime := branches[branchIndex].Commit.Timestamp
+	result.Topics = make(map[string]bool)
+	for _, topic := range topics {
+		result.Topics[strings.ToLower(topic)] = true
+	}
 	if result.SHA == currentSHA {
 		// 历史缓存一致，跳过
 		result.FetchTime = time.Now().UnixMilli()
@@ -115,6 +124,7 @@ func fetch(client *GiteaConfig, domain *PageDomain, result *DomainConfig) error 
 			}
 		}
 		result.SHA = currentSHA
+		result.DATE = commitTime
 	}
 	//查询是否为仓库
 	result.Exists, err = client.FileExists(domain, "/index.html")
@@ -126,14 +136,16 @@ func fetch(client *GiteaConfig, domain *PageDomain, result *DomainConfig) error 
 	}
 	result.Index = "index.html"
 	//############# 处理 404
-	notFound, err := client.FileExists(domain, "/404.html")
-	if err != nil {
-		return err
-	}
-	if notFound {
-		result.NotFound = "404.html"
-	} else {
+	if result.IsRoutePage() {
 		result.NotFound = "index.html"
+	} else {
+		notFound, err := client.FileExists(domain, "/404.html")
+		if err != nil {
+			return err
+		}
+		if notFound {
+			result.NotFound = "404.html"
+		}
 	}
 	// ############ 拉取 CNAME
 	cname, err := client.ReadStringRepoFile(domain, "/CNAME")
@@ -159,9 +171,10 @@ func fetch(client *GiteaConfig, domain *PageDomain, result *DomainConfig) error 
 }
 
 type PageCacheInfo struct {
-	MODE   string `json:"MODE"`
-	SHA    string `json:"SHA"`
-	UPDATE string `json:"UPDATE"`
+	MODE  string `json:"MODE"`
+	SHA   string `json:"SHA"`
+	CHECK string `json:"CHECK"`
+	COUNT int    `json:"COUNT"`
 }
 
 func (receiver *PageCacheInfo) raw() string {
@@ -176,31 +189,54 @@ func (receiver *DomainConfig) Copy(
 	_ *http.Request,
 	maxSize int,
 ) (bool, error) {
+	client.Logger.Debug("copy location", zap.String("path", path))
 	if strings.HasSuffix(path, "/") {
 		path = path + "index.html"
 	}
 	cacheInfo := &PageCacheInfo{
-		MODE:   "MISS",
-		SHA:    receiver.SHA,
-		UPDATE: time.UnixMilli(receiver.FetchTime).Format(time.RFC1123),
+		MODE:  "MISS",
+		SHA:   receiver.SHA,
+		CHECK: time.UnixMilli(receiver.FetchTime).Format(time.RFC1123),
+		COUNT: receiver.FileCache.Len(),
 	}
 
 	pathTag := fmt.Sprintf("\"%x\"",
 		sha1.Sum([]byte(
 			fmt.Sprintf("%s|%s|%s", receiver.SHA, receiver.PageDomain.Key(), path))))
-	contentType := mime.TypeByExtension(filepath.Ext(path))
 	// 开启缓存
+	contentType := mime.TypeByExtension(filepath.Ext(path))
 	data, err := receiver.FileCache.Get(path)
 	if err == nil {
 		cacheInfo.MODE = "HIT"
 		for k, v := range client.CustomHeaders {
 			writer.Header().Set(k, v)
 		}
+		statusCode := http.StatusOK
+		// 不存在文件的缓存
+		if len(data) == 0 {
+			failBack := receiver.NotFound
+			if failBack == "" && receiver.IsRoutePage() {
+				failBack = receiver.Index
+			} else if failBack == "" {
+				return false, ErrorNotFound
+			}
+			data, err = receiver.FileCache.Get(failBack)
+			if err != nil {
+				return false, err
+			}
+			if !receiver.IsRoutePage() {
+				statusCode = http.StatusNotFound
+			}
+			contentType = mime.TypeByExtension(filepath.Ext(failBack))
+		}
 		writer.Header().Set("ETag", pathTag)
 		writer.Header().Set("Pages-Server-Cache", cacheInfo.raw())
 		writer.Header().Set("Content-Length", strconv.Itoa(len(data)))
 		writer.Header().Add("Content-Type", contentType)
-		writer.WriteHeader(http.StatusOK)
+		writer.Header().Add("Last-Modified", receiver.DATE.UTC().Format(http.TimeFormat))
+
+		writer.WriteHeader(statusCode)
+
 		_, err := writer.Write(data)
 		return true, err
 	} else if errors.Is(err, bigcache.ErrEntryNotFound) {
@@ -208,9 +244,22 @@ func (receiver *DomainConfig) Copy(
 		// 使用 SHA 抓取内容
 		domain := *(&receiver.PageDomain)
 		domain.Branch = receiver.SHA
+		statusCode := http.StatusOK
+		savedPath := path
 		ctx, err := client.OpenFileContext(&domain, receiver.BasePath+path)
 		if errors.Is(err, ErrorNotFound) && receiver.NotFound != "" {
+			// 建立 NotFound 缓存
+			client.Logger.Debug("empty cache saved.", zap.Any("savedPath", path))
+			_ = receiver.FileCache.Set(path, make([]byte, 0))
+			savedPath = receiver.NotFound
 			ctx, err = client.OpenFileContext(&domain, receiver.BasePath+receiver.NotFound)
+			if err != nil {
+				return false, err
+			}
+			if !receiver.IsRoutePage() {
+				statusCode = http.StatusNotFound
+			}
+			contentType = mime.TypeByExtension(filepath.Ext(receiver.NotFound))
 		}
 		if err != nil {
 			return false, err
@@ -231,7 +280,8 @@ func (receiver *DomainConfig) Copy(
 		writer.Header().Set("Pages-Server-Cache", cacheInfo.raw())
 		writer.Header().Set("Content-Length", contentLength)
 		writer.Header().Add("Content-Type", contentType)
-		writer.WriteHeader(http.StatusOK)
+		writer.Header().Add("Last-Modified", receiver.DATE.UTC().Format(http.TimeFormat))
+		writer.WriteHeader(statusCode)
 		if skipCache {
 			// 文件过大，跳过缓存
 			_, err = io.Copy(writer, ctx.Body)
@@ -241,7 +291,8 @@ func (receiver *DomainConfig) Copy(
 			if err != nil {
 				return true, err
 			}
-			err = receiver.FileCache.Set(path, all)
+			err = receiver.FileCache.Set(savedPath, all)
+			client.Logger.Debug("cache saved.", zap.Any("savedPath", savedPath))
 			if err != nil {
 				return true, err
 			}
@@ -262,7 +313,8 @@ func (c *DomainCache) FetchRepo(client *GiteaConfig, domain *PageDomain) (*Domai
 	cacheKey := domain.Key()
 	result, exists := c.Get(cacheKey)
 	if !exists {
-		bigCache, err := bigcache.New(context.Background(), bigcache.DefaultConfig(10*time.Minute))
+		config := bigcache.DefaultConfig(10 * time.Minute)
+		bigCache, err := bigcache.New(context.Background(), config)
 		if err != nil {
 			return nil, false, err
 		}
