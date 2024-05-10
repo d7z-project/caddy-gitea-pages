@@ -2,19 +2,17 @@ package pages
 
 import (
 	"bufio"
+	"bytes"
 	"code.gitea.io/sdk/gitea"
 	"context"
 	"crypto/sha1"
-	"encoding/json"
 	"fmt"
 	"github.com/allegro/bigcache/v3"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io"
-	"mime"
 	"net/http"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -127,7 +125,7 @@ func fetch(client *GiteaConfig, domain *PageDomain, result *DomainConfig) error 
 		result.DATE = commitTime
 	}
 	//查询是否为仓库
-	result.Exists, err = client.FileExists(domain, "/index.html")
+	result.Exists, err = client.FileExists(domain, result.BasePath+"/index.html")
 	if err != nil {
 		return err
 	}
@@ -137,14 +135,14 @@ func fetch(client *GiteaConfig, domain *PageDomain, result *DomainConfig) error 
 	result.Index = "index.html"
 	//############# 处理 404
 	if result.IsRoutePage() {
-		result.NotFound = "index.html"
+		result.NotFound = "/index.html"
 	} else {
-		notFound, err := client.FileExists(domain, "/404.html")
+		notFound, err := client.FileExists(domain, result.BasePath+"/404.html")
 		if err != nil {
 			return err
 		}
 		if notFound {
-			result.NotFound = "404.html"
+			result.NotFound = "/404.html"
 		}
 	}
 	// ############ 拉取 CNAME
@@ -170,16 +168,134 @@ func fetch(client *GiteaConfig, domain *PageDomain, result *DomainConfig) error 
 	return nil
 }
 
-type PageCacheInfo struct {
-	MODE  string `json:"MODE"`
-	SHA   string `json:"SHA"`
-	CHECK string `json:"CHECK"`
-	COUNT int    `json:"COUNT"`
+func (receiver *DomainConfig) tag(path string) string {
+	return fmt.Sprintf("%x", sha1.Sum([]byte(
+		fmt.Sprintf("%s|%s|%s", receiver.SHA, receiver.PageDomain.Key(), path))))
 }
 
-func (receiver *PageCacheInfo) raw() string {
-	marshal, _ := json.Marshal(receiver)
-	return string(marshal)
+func (receiver *DomainConfig) withNotFoundPage(
+	client *GiteaConfig,
+	response *FakeResponse,
+) error {
+	if receiver.NotFound == "" {
+		// 没有默认页面
+		return ErrorNotFound
+	}
+	notFound, err := receiver.FileCache.Get(receiver.NotFound)
+	if errors.Is(err, bigcache.ErrEntryNotFound) {
+		// 不存在 notfound
+		domain := &receiver.PageDomain
+		fileContext, err := client.OpenFileContext(domain, receiver.BasePath+receiver.NotFound)
+		if errors.Is(err, ErrorNotFound) {
+			//缓存 not found 不存在
+			_ = receiver.FileCache.Set(receiver.NotFound, make([]byte, 0))
+			return err
+		} else if err != nil {
+			return err
+		}
+		length, _ := strconv.Atoi(fileContext.Header.Get("Content-Length"))
+		if length > client.CacheMaxSize {
+			client.Logger.Debug("default page too large.")
+			response.Body = fileContext.Body
+			response.CacheModeIgnore()
+		} else {
+			// 保存缓存
+			client.Logger.Debug("create default error page.")
+			defer fileContext.Body.Close()
+			defBuf, _ := io.ReadAll(fileContext.Body)
+			_ = receiver.FileCache.Set(receiver.NotFound, defBuf)
+			response.Body = NewByteBuf(defBuf)
+			response.CacheModeMiss()
+		}
+		response.ContentTypeExt(receiver.NotFound)
+		response.Length(length)
+	} else if err != nil {
+		return err
+	} else {
+		if len(notFound) == 0 {
+			// 不存在 NotFound
+			return ErrorNotFound
+		}
+		response.Length(len(notFound))
+		response.Body = NewByteBuf(notFound)
+		response.CacheModeHit()
+	}
+	client.Logger.Debug("use cache error page.")
+	response.ContentTypeExt(receiver.NotFound)
+	if receiver.IsRoutePage() {
+		response.StatusCode = http.StatusOK
+	} else {
+		response.StatusCode = http.StatusNotFound
+	}
+	return nil
+}
+
+func (receiver *DomainConfig) getCachedData(
+	client *GiteaConfig,
+	path string,
+) (*FakeResponse, error) {
+	result := NewFakeResponse()
+	if strings.HasSuffix(path, "/") {
+		path = path + "index.html"
+	}
+	for k, v := range client.CustomHeaders {
+		result.SetHeader(k, v)
+	}
+	result.ETag(receiver.tag(path))
+	result.ContentTypeExt(path)
+	cacheBuf, err := receiver.FileCache.Get(path)
+	// 使用缓存内容
+	if err == nil {
+		if len(cacheBuf) == 0 {
+			//使用 NotFound 内容
+			client.Logger.Debug("location not found ,", zap.Any("path", path))
+			return result, receiver.withNotFoundPage(client, result)
+		} else {
+			// 使用缓存
+			client.Logger.Debug("location use cache ,", zap.Any("path", path))
+			result.Body = ByteBuf{
+				bytes.NewBuffer(cacheBuf),
+			}
+			result.Length(len(cacheBuf))
+			result.CacheModeHit()
+			return result, nil
+		}
+	} else {
+		// 添加缓存
+		client.Logger.Debug("location add cache ,", zap.Any("path", path))
+		domain := *(&receiver.PageDomain)
+		domain.Branch = receiver.SHA
+		fileContext, err := client.OpenFileContext(&domain, receiver.BasePath+path)
+		if err != nil && !errors.Is(err, ErrorNotFound) {
+			return nil, err
+		} else if errors.Is(err, ErrorNotFound) {
+			client.Logger.Debug("location not found and src not found,", zap.Any("path", path))
+			// 不存在且源不存在
+			_ = receiver.FileCache.Set(path, make([]byte, 0))
+			return result, receiver.withNotFoundPage(client, result)
+		} else {
+			// 源存在，执行缓存
+			client.Logger.Debug("location found and set cache,", zap.Any("path", path))
+			length, _ := strconv.Atoi(fileContext.Header.Get("Content-Length"))
+			if length > client.CacheMaxSize {
+				client.Logger.Debug("location too large , skip cache.", zap.Any("path", path))
+				// 超过大小，回源
+				result.Body = fileContext.Body
+				result.Length(length)
+				result.CacheModeIgnore()
+				return result, nil
+			} else {
+				client.Logger.Debug("location saved,", zap.Any("path", path))
+				// 未超过大小，缓存
+				body, _ := io.ReadAll(fileContext.Body)
+				_ = receiver.FileCache.Set(path, body)
+				result.Body = NewByteBuf(body)
+				result.Length(len(body))
+				result.CacheModeMiss()
+				return result, nil
+			}
+		}
+	}
 }
 
 func (receiver *DomainConfig) Copy(
@@ -187,122 +303,22 @@ func (receiver *DomainConfig) Copy(
 	path string,
 	writer http.ResponseWriter,
 	_ *http.Request,
-	maxSize int,
 ) (bool, error) {
-	client.Logger.Debug("copy location", zap.String("path", path))
-	if strings.HasSuffix(path, "/") {
-		path = path + "index.html"
-	}
-	cacheInfo := &PageCacheInfo{
-		MODE:  "MISS",
-		SHA:   receiver.SHA,
-		CHECK: time.UnixMilli(receiver.FetchTime).Format(time.RFC1123),
-		COUNT: receiver.FileCache.Len(),
-	}
-
-	pathTag := fmt.Sprintf("\"%x\"",
-		sha1.Sum([]byte(
-			fmt.Sprintf("%s|%s|%s", receiver.SHA, receiver.PageDomain.Key(), path))))
-	// 开启缓存
-	contentType := mime.TypeByExtension(filepath.Ext(path))
-	data, err := receiver.FileCache.Get(path)
-	if err == nil {
-		cacheInfo.MODE = "HIT"
-		for k, v := range client.CustomHeaders {
-			writer.Header().Set(k, v)
-		}
-		statusCode := http.StatusOK
-		// 不存在文件的缓存
-		if len(data) == 0 {
-			failBack := receiver.NotFound
-			if failBack == "" && receiver.IsRoutePage() {
-				failBack = receiver.Index
-			} else if failBack == "" {
-				return false, ErrorNotFound
-			}
-			data, err = receiver.FileCache.Get(failBack)
-			if err != nil {
-				return false, err
-			}
-			if !receiver.IsRoutePage() {
-				statusCode = http.StatusNotFound
-			}
-			contentType = mime.TypeByExtension(filepath.Ext(failBack))
-		}
-		writer.Header().Set("ETag", pathTag)
-		writer.Header().Set("Pages-Server-Cache", cacheInfo.raw())
-		writer.Header().Set("Content-Length", strconv.Itoa(len(data)))
-		writer.Header().Add("Content-Type", contentType)
-		writer.Header().Add("Last-Modified", receiver.DATE.UTC().Format(http.TimeFormat))
-
-		writer.WriteHeader(statusCode)
-
-		_, err := writer.Write(data)
-		return true, err
-	} else if errors.Is(err, bigcache.ErrEntryNotFound) {
-		cacheInfo.MODE = "MISS"
-		// 使用 SHA 抓取内容
-		domain := *(&receiver.PageDomain)
-		domain.Branch = receiver.SHA
-		statusCode := http.StatusOK
-		savedPath := path
-		ctx, err := client.OpenFileContext(&domain, receiver.BasePath+path)
-		if errors.Is(err, ErrorNotFound) && receiver.NotFound != "" {
-			// 建立 NotFound 缓存
-			client.Logger.Debug("empty cache saved.", zap.Any("savedPath", path))
-			_ = receiver.FileCache.Set(path, make([]byte, 0))
-			savedPath = receiver.NotFound
-			ctx, err = client.OpenFileContext(&domain, receiver.BasePath+receiver.NotFound)
-			if err != nil {
-				return false, err
-			}
-			if !receiver.IsRoutePage() {
-				statusCode = http.StatusNotFound
-			}
-			contentType = mime.TypeByExtension(filepath.Ext(receiver.NotFound))
-		}
-		if err != nil {
-			return false, err
-		}
-		contentLength := ctx.Header.Get("Content-Length")
-		length, err := strconv.Atoi(contentLength)
-		skipCache := length >= maxSize
-		if maxSize <= 0 {
-			skipCache = false
-		}
-		if skipCache {
-			cacheInfo.MODE = "SKIP"
-		}
-		for k, v := range client.CustomHeaders {
-			writer.Header().Set(k, v)
-		}
-		writer.Header().Set("ETag", pathTag)
-		writer.Header().Set("Pages-Server-Cache", cacheInfo.raw())
-		writer.Header().Set("Content-Length", contentLength)
-		writer.Header().Add("Content-Type", contentType)
-		writer.Header().Add("Last-Modified", receiver.DATE.UTC().Format(http.TimeFormat))
-		writer.WriteHeader(statusCode)
-		if skipCache {
-			// 文件过大，跳过缓存
-			_, err = io.Copy(writer, ctx.Body)
-			return true, err
-		} else {
-			all, err := io.ReadAll(ctx.Body)
-			if err != nil {
-				return true, err
-			}
-			err = receiver.FileCache.Set(savedPath, all)
-			client.Logger.Debug("cache saved.", zap.Any("savedPath", savedPath))
-			if err != nil {
-				return true, err
-			}
-			_, err = writer.Write(all)
-			return true, err
-		}
-	} else {
+	fakeResp, err := receiver.getCachedData(client, path)
+	if err != nil {
 		return false, err
 	}
-
+	for k, v := range fakeResp.Header {
+		for _, s := range v {
+			writer.Header().Add(k, s)
+		}
+	}
+	writer.Header().Add("Pages-Server-Hash", receiver.SHA)
+	writer.Header().Add("Last-Modified", receiver.DATE.UTC().Format(http.TimeFormat))
+	writer.WriteHeader(fakeResp.StatusCode)
+	defer fakeResp.Body.Close()
+	_, err = io.Copy(writer, fakeResp.Body)
+	return true, err
 }
 
 // FetchRepo 拉取 Repo 信息

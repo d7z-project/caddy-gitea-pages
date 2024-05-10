@@ -16,6 +16,7 @@ type GiteaConfig struct {
 	Client        *gitea.Client     `json:"-"`
 	Logger        *zap.Logger       `json:"-"`
 	CustomHeaders map[string]string `json:"custom_headers"`
+	CacheMaxSize  int               `json:"max_cache_size"`
 }
 
 func (c *GiteaConfig) FileExists(domain *PageDomain, path string) (bool, error) {

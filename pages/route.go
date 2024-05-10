@@ -55,6 +55,6 @@ func (p *PageClient) RouteExists(writer http.ResponseWriter, request *http.Reque
 		return nil
 	}
 
-	_, err = config.Copy(p.GiteaConfig, filePath, writer, request, p.FileMaxCacheSize)
+	_, err = config.Copy(p.GiteaConfig, filePath, writer, request)
 	return err
 }

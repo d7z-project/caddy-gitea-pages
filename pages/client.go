@@ -14,15 +14,14 @@ type AutoRedirect struct {
 }
 
 type PageClient struct {
-	BaseDomain       string
-	GiteaConfig      *GiteaConfig
-	DomainAlias      *CustomDomains
-	ErrorPages       *ErrorPages
-	AutoRedirect     *AutoRedirect
-	OwnerCache       *OwnerCache
-	DomainCache      *DomainCache
-	logger           *zap.Logger
-	FileMaxCacheSize int
+	BaseDomain   string
+	GiteaConfig  *GiteaConfig
+	DomainAlias  *CustomDomains
+	ErrorPages   *ErrorPages
+	AutoRedirect *AutoRedirect
+	OwnerCache   *OwnerCache
+	DomainCache  *DomainCache
+	logger       *zap.Logger
 }
 
 func (p *PageClient) Close() error {
@@ -62,20 +61,20 @@ func NewPageClient(
 		Token:         config.Token,
 		Client:        client,
 		Logger:        logger,
+		CacheMaxSize:  config.CacheMaxSize,
 		CustomHeaders: config.CustomHeaders,
 	}
 	domainCache := NewDomainCache(config.CacheTimeout)
 	logger.Info("gitea cache ttl " + strconv.FormatInt(config.CacheTimeout.Milliseconds(), 10) + " ms .")
 	return &PageClient{
-		GiteaConfig:      giteaConfig,
-		BaseDomain:       "." + strings.Trim(config.Domain, "."),
-		DomainAlias:      alias,
-		ErrorPages:       pages,
-		logger:           logger,
-		AutoRedirect:     config.AutoRedirect,
-		DomainCache:      &domainCache,
-		OwnerCache:       &ownerCache,
-		FileMaxCacheSize: config.CacheMaxSize,
+		GiteaConfig:  giteaConfig,
+		BaseDomain:   "." + strings.Trim(config.Domain, "."),
+		DomainAlias:  alias,
+		ErrorPages:   pages,
+		logger:       logger,
+		AutoRedirect: config.AutoRedirect,
+		DomainCache:  &domainCache,
+		OwnerCache:   &ownerCache,
 	}, nil
 }
 

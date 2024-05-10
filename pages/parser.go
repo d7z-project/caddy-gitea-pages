@@ -44,11 +44,18 @@ func (p *PageClient) parseDomain(request *http.Request) (*PageDomain, string, er
 		}
 		// 存在子目录且仓库存在
 		pathTrim = pathTrim[1:]
+		path := ""
 		if strings.HasSuffix(filePath, "/") {
-			return result, strings.ReplaceAll("/"+strings.Join(pathTrim, "/")+"/", "//", ""), nil
+			path = "/" + strings.Join(pathTrim, "/") + "/"
 		} else {
-			return result, strings.ReplaceAll("/"+strings.Join(pathTrim, "/"), "//", ""), nil
+			path = "/" + strings.Join(pathTrim, "/")
 		}
+		path = strings.ReplaceAll(path, "//", "/")
+		path = strings.ReplaceAll(path, "//", "/")
+		if path == "" {
+			path = "/"
+		}
+		return result, path, nil
 	} else {
 		get, exists := p.DomainAlias.Get(host)
 		if exists {
