@@ -54,6 +54,7 @@ gitea {
 
 ## TODO
 
+- [ ] 优化并发模型
 - [x] 支持 CNAME
 - [x] 支持内容缓存
 - [ ] 支持 Http Range 断点续传
