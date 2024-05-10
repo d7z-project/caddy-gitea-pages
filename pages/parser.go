@@ -35,6 +35,10 @@ func (p *PageClient) parseDomain(request *http.Request) (*PageDomain, string, er
 			result.Repo = ownerRepoName
 			return result, filePath, nil
 		} else if result.Repo == "" || !config.Exists(result.Repo) {
+			if config.Exists(ownerRepoName) {
+				result.Repo = ownerRepoName
+				return result, filePath, nil
+			}
 			// 未指定 repo 或者 repo 不存在，跳过
 			return nil, "", errors.Wrap(ErrorNotFound, result.Repo+" not found")
 		}
