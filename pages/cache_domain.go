@@ -57,8 +57,8 @@ func (receiver *DomainConfig) IsRoutePage() bool {
 	return receiver.Topics["routes-history"] || receiver.Topics["routes-hash"]
 }
 
-func NewDomainCache(ttl time.Duration) DomainCache {
-	c := cache.New(5*time.Minute, 10*ttl)
+func NewDomainCache(ttl time.Duration, refreshTtl time.Duration) DomainCache {
+	c := cache.New(refreshTtl, 2*refreshTtl)
 	c.OnEvicted(func(_ string, i interface{}) {
 		config := i.(*DomainConfig)
 		if config != nil {

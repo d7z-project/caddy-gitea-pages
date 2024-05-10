@@ -18,8 +18,8 @@ type OwnerCache struct {
 	mutexes sync.Map
 }
 
-func NewOwnerCache(ttl time.Duration) OwnerCache {
-	cache, _ := bigcache.New(context.Background(), bigcache.DefaultConfig(10*ttl))
+func NewOwnerCache(ttl time.Duration, cacheTtl time.Duration) OwnerCache {
+	cache, _ := bigcache.New(context.Background(), bigcache.DefaultConfig(cacheTtl))
 	return OwnerCache{
 		ttl:      ttl,
 		mutexes:  sync.Map{},

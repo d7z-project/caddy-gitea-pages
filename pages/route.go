@@ -54,7 +54,6 @@ func (p *PageClient) RouteExists(writer http.ResponseWriter, request *http.Reque
 		http.Redirect(writer, request, p.AutoRedirect.Scheme+"://"+config.CNAME[0], p.AutoRedirect.Code)
 		return nil
 	}
-
 	_, err = config.Copy(p.GiteaConfig, filePath, writer, request)
 	return err
 }

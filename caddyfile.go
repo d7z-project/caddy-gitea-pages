@@ -36,15 +36,19 @@ func (m *Middleware) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				d.Args(&m.Config.Token)
 			case "cache":
 				remainingArgs := d.RemainingArgs()
-				if len(remainingArgs) != 2 {
-					return d.Errf("expected 2 argument for 'cache'; got %v", remainingArgs)
+				if len(remainingArgs) != 3 {
+					return d.Errf("expected 3 argument for 'cache'; got %v", remainingArgs)
 				}
 				var err error
 				m.Config.CacheTimeout, err = time.ParseDuration(remainingArgs[0])
 				if err != nil {
 					return d.Errf("invalid duration: %v", err)
 				}
-				size, err := units.ParseBase2Bytes(remainingArgs[1])
+				m.Config.CacheRefresh, err = time.ParseDuration(remainingArgs[1])
+				if err != nil {
+					return d.Errf("invalid duration: %v", err)
+				}
+				size, err := units.ParseBase2Bytes(remainingArgs[2])
 				if err != nil {
 					return d.Errf("invalid CacheSize: %v", err)
 				}
@@ -158,6 +162,9 @@ func parseCaddyfile(middleware *Middleware) func(httpcaddyfile.Helper) (caddyhtt
 			middleware.Config.AutoRedirect = &pages.AutoRedirect{
 				Enabled: false,
 			}
+		}
+		if middleware.Config.CacheRefresh <= 0 {
+			middleware.Config.CacheRefresh = 1 * time.Minute
 		}
 		if middleware.Config.CacheTimeout <= 0 {
 			middleware.Config.CacheTimeout = 3 * time.Minute

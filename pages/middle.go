@@ -7,6 +7,7 @@ type MiddlewareConfig struct {
 	Token         string            `json:"token"`
 	Domain        string            `json:"domain"`
 	Alias         string            `json:"alias"`
+	CacheRefresh  time.Duration     `json:"cache_refresh"`
 	CacheTimeout  time.Duration     `json:"cache_timeout"`
 	ErrorPages    map[string]string `json:"errors"`
 	CustomHeaders map[string]string `json:"custom_headers"`
