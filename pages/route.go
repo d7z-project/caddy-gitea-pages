@@ -43,8 +43,8 @@ func (p *PageClient) RouteExists(writer http.ResponseWriter, request *http.Reque
 	if !config.Exists {
 		return ErrorNotFound
 	}
-	if !cache {
-		p.logger.Info("Add CNAME", zap.Any("CNAME", config.CNAME))
+	if !cache && len(config.CNAME) > 0 {
+		p.logger.Info("Add CNAME link.", zap.Any("CNAME", config.CNAME))
 		p.DomainAlias.add(domain, config.CNAME...)
 	}
 	// 跳过 30x 重定向

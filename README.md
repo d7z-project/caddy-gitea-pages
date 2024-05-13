@@ -32,7 +32,6 @@ gitea {
    # 默认域名，类似于 Github 的 github.io
    domain example.com
 }
-
 ```
 
 其中，token 需要如下权限：

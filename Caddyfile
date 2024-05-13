@@ -10,10 +10,11 @@
    token please-replace-it
    # 默认域名，类似于 Github 的 github.io
    domain example.com
-   # CNAME 配置缓存地址 [shared]: 在 caddy 实例中共享 Alias
+   # CNAME 配置保存地址
+   # shared: 在 caddy 实例中共享 alias，一般不建议使用
    alias path/to/file shared
-   # 配置缓存 (缓存刷新时间, 文件缓存时间 ,最大单文件缓存大小)
-   cache 1m 1h 1KB
+   # 配置缓存 (缓存刷新时间, 文件缓存时间 , 最大单文件缓存大小)
+   cache 30s 24h 1MB
    # 默认 返回 Header，可以配置同源策略或更多内容
    headers {
       Access-Control-Allow-Origin  *

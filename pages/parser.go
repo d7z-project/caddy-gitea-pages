@@ -8,7 +8,10 @@ import (
 )
 
 func (p *PageClient) parseDomain(request *http.Request) (*PageDomain, string, error) {
-	// TODO: 处理 IPv6 Host:Port 的问题
+	if strings.Contains(request.Host, "]") {
+		//跳过 ipv6 address 直接访问, 因为仅支持域名的方式
+		return nil, "", ErrorNotMatches
+	}
 	host := strings.Split(request.Host, ":")[0]
 	filePath := request.URL.Path
 	pathTrim := strings.Split(strings.Trim(filePath, "/"), "/")
