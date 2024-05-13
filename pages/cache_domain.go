@@ -225,6 +225,7 @@ func (receiver *DomainConfig) withNotFoundPage(
 	return nil
 }
 
+// todo: 读写加锁
 func (receiver *DomainConfig) getCachedData(
 	client *GiteaConfig,
 	path string,
@@ -320,11 +321,24 @@ func (receiver *DomainConfig) Copy(
 // FetchRepo 拉取 Repo 信息
 func (c *DomainCache) FetchRepo(client *GiteaConfig, domain *PageDomain) (*DomainConfig, bool, error) {
 	nextTime := time.Now().UnixMilli() - c.ttl.Milliseconds()
-	lock := c.Lock(domain)
-	defer lock()
 	cacheKey := domain.Key()
-	result, exists := c.Get(cacheKey)
-	if !exists {
+	result, _ := c.Get(cacheKey)
+	if result != nil {
+		result := result.(*DomainConfig)
+		if nextTime > result.FetchTime {
+			// 刷新旧的缓存
+			result = nil
+		} else {
+			return result, true, nil
+
+		}
+	}
+	if result == nil {
+		lock := c.Lock(domain)
+		defer lock()
+		if result, find := c.Get(cacheKey); find {
+			return result.(*DomainConfig), true, nil
+		}
 		result = &DomainConfig{
 			PageDomain: *domain,
 			FileCache:  cache.New(c.ttl, c.ttl*2),
@@ -338,14 +352,7 @@ func (c *DomainCache) FetchRepo(client *GiteaConfig, domain *PageDomain) (*Domai
 		}
 		return result.(*DomainConfig), false, nil
 	} else {
-		config := result.(*DomainConfig)
-		if nextTime > config.FetchTime {
-			// 刷新旧的缓存
-			if err := fetch(client, domain, config); err != nil {
-				return nil, false, err
-			}
-		}
-		return config, true, nil
+		return result.(*DomainConfig), true, nil
 	}
 
 }

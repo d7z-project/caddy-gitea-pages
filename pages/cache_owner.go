@@ -84,6 +84,9 @@ func (c *OwnerCache) GetOwnerConfig(giteaConfig *GiteaConfig, owner string) (*Ow
 	if raw == nil {
 		lock := c.Lock(owner)
 		defer lock()
+		if raw, find := c.Get(owner); find {
+			return raw.(*OwnerConfig), nil
+		}
 		//不存在缓存
 		var err error
 		result, err = getOwner(giteaConfig, owner)
