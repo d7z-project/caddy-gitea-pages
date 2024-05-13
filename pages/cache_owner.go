@@ -2,9 +2,7 @@ package pages
 
 import (
 	"code.gitea.io/sdk/gitea"
-	"context"
-	"encoding/json"
-	"github.com/allegro/bigcache/v3"
+	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 	"net/http"
 	"strings"
@@ -14,16 +12,15 @@ import (
 
 type OwnerCache struct {
 	ttl time.Duration
-	*bigcache.BigCache
+	*cache.Cache
 	mutexes sync.Map
 }
 
 func NewOwnerCache(ttl time.Duration, cacheTtl time.Duration) OwnerCache {
-	cache, _ := bigcache.New(context.Background(), bigcache.DefaultConfig(cacheTtl))
 	return OwnerCache{
-		ttl:      ttl,
-		mutexes:  sync.Map{},
-		BigCache: cache,
+		ttl:     ttl,
+		mutexes: sync.Map{},
+		Cache:   cache.New(cacheTtl, cacheTtl*2),
 	}
 }
 
@@ -72,37 +69,30 @@ func getOwner(giteaConfig *GiteaConfig, owner string) (*OwnerConfig, error) {
 }
 
 func (c *OwnerCache) GetOwnerConfig(giteaConfig *GiteaConfig, owner string) (*OwnerConfig, error) {
-	raw, err := c.Get(owner)
-	result := NewOwnerConfig()
+	raw, _ := c.Get(owner)
 	// 每固定时间刷新一次
 	nextTime := time.Now().UnixMilli() - c.ttl.Milliseconds()
-	if err == nil {
-		err = json.Unmarshal(raw, result)
-		if err != nil {
-			return nil, err
-		}
+	var result *OwnerConfig
+	if raw != nil {
+		result = raw.(*OwnerConfig)
 		if nextTime > result.FetchTime {
-			err = bigcache.ErrEntryNotFound
+			//移除旧数据
+			c.Delete(owner)
+			raw = nil
 		}
 	}
-	if errors.Is(err, bigcache.ErrEntryNotFound) {
+	if raw == nil {
 		lock := c.Lock(owner)
 		defer lock()
 		//不存在缓存
-		config, err := getOwner(giteaConfig, owner)
+		var err error
+		result, err = getOwner(giteaConfig, owner)
 		if err != nil {
 			return nil, errors.Wrap(err, "owner config not found")
 		}
-		marshal, err := json.Marshal(config)
-		if err != nil {
-			return nil, err
-		}
-		return config, c.Set(owner, marshal)
-	} else if err != nil {
-		return nil, err
-	} else {
-		return result, nil
+		c.Set(owner, result, cache.DefaultExpiration)
 	}
+	return result, nil
 }
 
 func (c *OwnerCache) Lock(any string) func() {

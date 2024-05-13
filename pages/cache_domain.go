@@ -4,10 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"code.gitea.io/sdk/gitea"
-	"context"
 	"crypto/sha1"
 	"fmt"
-	"github.com/allegro/bigcache/v3"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -37,8 +35,8 @@ type DomainConfig struct {
 	FetchTime int64 //上次刷新时间
 
 	PageDomain PageDomain
-	Exists     bool               // 当前项目是否为 Pages
-	FileCache  *bigcache.BigCache // 文件缓存
+	Exists     bool         // 当前项目是否为 Pages
+	FileCache  *cache.Cache // 文件缓存
 
 	CNAME    []string        // 重定向地址
 	SHA      string          // 缓存 SHA
@@ -51,7 +49,8 @@ type DomainConfig struct {
 }
 
 func (receiver *DomainConfig) Close() error {
-	return receiver.FileCache.Close()
+	receiver.FileCache.Flush()
+	return nil
 }
 func (receiver *DomainConfig) IsRoutePage() bool {
 	return receiver.Topics["routes-history"] || receiver.Topics["routes-hash"]
@@ -116,10 +115,7 @@ func fetch(client *GiteaConfig, domain *PageDomain, result *DomainConfig) error 
 	// 清理历史缓存
 	if result.SHA != currentSHA {
 		if result.FileCache != nil {
-			err := result.FileCache.Reset()
-			if err != nil {
-				return err
-			}
+			result.FileCache.Flush()
 		}
 		result.SHA = currentSHA
 		result.DATE = commitTime
@@ -181,14 +177,14 @@ func (receiver *DomainConfig) withNotFoundPage(
 		// 没有默认页面
 		return ErrorNotFound
 	}
-	notFound, err := receiver.FileCache.Get(receiver.NotFound)
-	if errors.Is(err, bigcache.ErrEntryNotFound) {
+	notFound, _ := receiver.FileCache.Get(receiver.NotFound)
+	if notFound == nil {
 		// 不存在 notfound
 		domain := &receiver.PageDomain
 		fileContext, err := client.OpenFileContext(domain, receiver.BasePath+receiver.NotFound)
 		if errors.Is(err, ErrorNotFound) {
 			//缓存 not found 不存在
-			_ = receiver.FileCache.Set(receiver.NotFound, make([]byte, 0))
+			receiver.FileCache.Set(receiver.NotFound, make([]byte, 0), cache.DefaultExpiration)
 			return err
 		} else if err != nil {
 			return err
@@ -203,15 +199,14 @@ func (receiver *DomainConfig) withNotFoundPage(
 			client.Logger.Debug("create default error page.")
 			defer fileContext.Body.Close()
 			defBuf, _ := io.ReadAll(fileContext.Body)
-			_ = receiver.FileCache.Set(receiver.NotFound, defBuf)
+			receiver.FileCache.Set(receiver.NotFound, defBuf, cache.DefaultExpiration)
 			response.Body = NewByteBuf(defBuf)
 			response.CacheModeMiss()
 		}
 		response.ContentTypeExt(receiver.NotFound)
 		response.Length(length)
-	} else if err != nil {
-		return err
 	} else {
+		notFound := notFound.([]byte)
 		if len(notFound) == 0 {
 			// 不存在 NotFound
 			return ErrorNotFound
@@ -243,9 +238,10 @@ func (receiver *DomainConfig) getCachedData(
 	}
 	result.ETag(receiver.tag(path))
 	result.ContentTypeExt(path)
-	cacheBuf, err := receiver.FileCache.Get(path)
+	cacheBuf, _ := receiver.FileCache.Get(path)
 	// 使用缓存内容
-	if err == nil {
+	if cacheBuf != nil {
+		cacheBuf := cacheBuf.([]byte)
 		if len(cacheBuf) == 0 {
 			//使用 NotFound 内容
 			client.Logger.Debug("location not found ,", zap.Any("path", path))
@@ -271,7 +267,7 @@ func (receiver *DomainConfig) getCachedData(
 		} else if errors.Is(err, ErrorNotFound) {
 			client.Logger.Debug("location not found and src not found,", zap.Any("path", path))
 			// 不存在且源不存在
-			_ = receiver.FileCache.Set(path, make([]byte, 0))
+			receiver.FileCache.Set(path, make([]byte, 0), cache.DefaultExpiration)
 			return result, receiver.withNotFoundPage(client, result)
 		} else {
 			// 源存在，执行缓存
@@ -288,7 +284,7 @@ func (receiver *DomainConfig) getCachedData(
 				client.Logger.Debug("location saved,", zap.Any("path", path))
 				// 未超过大小，缓存
 				body, _ := io.ReadAll(fileContext.Body)
-				_ = receiver.FileCache.Set(path, body)
+				receiver.FileCache.Set(path, body, cache.DefaultExpiration)
 				result.Body = NewByteBuf(body)
 				result.Length(len(body))
 				result.CacheModeMiss()
@@ -329,19 +325,14 @@ func (c *DomainCache) FetchRepo(client *GiteaConfig, domain *PageDomain) (*Domai
 	cacheKey := domain.Key()
 	result, exists := c.Get(cacheKey)
 	if !exists {
-		config := bigcache.DefaultConfig(10 * time.Minute)
-		bigCache, err := bigcache.New(context.Background(), config)
-		if err != nil {
-			return nil, false, err
-		}
 		result = &DomainConfig{
 			PageDomain: *domain,
-			FileCache:  bigCache,
+			FileCache:  cache.New(c.ttl, c.ttl*2),
 		}
-		if err = fetch(client, domain, result.(*DomainConfig)); err != nil {
+		if err := fetch(client, domain, result.(*DomainConfig)); err != nil {
 			return nil, false, err
 		}
-		err = c.Add(cacheKey, result, cache.DefaultExpiration)
+		err := c.Add(cacheKey, result, cache.DefaultExpiration)
 		if err != nil {
 			return nil, false, err
 		}

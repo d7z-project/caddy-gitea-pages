@@ -26,7 +26,7 @@ type PageClient struct {
 
 func (p *PageClient) Close() error {
 	if p.OwnerCache != nil {
-		_ = p.OwnerCache.Close()
+		p.OwnerCache.Cache.Flush()
 	}
 	if p.DomainCache != nil {
 		_ = p.DomainCache.Close()
