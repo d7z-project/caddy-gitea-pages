@@ -2,12 +2,12 @@ package pages
 
 import (
 	"fmt"
-	"git.d7z.net/d7z-project/caddy-gitea-pages/pages"
 	"github.com/alecthomas/units"
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/d7z-project/caddy-gitea-pages/pages"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io"

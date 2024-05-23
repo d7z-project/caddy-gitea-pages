@@ -9,7 +9,7 @@
 此处需要用到 `xcaddy` 工具，使用如下命令生成 Caddy 执行文件
 
 ```bash
-xcaddy build --with git.d7z.net/d7z-project/caddy-gitea-pages
+xcaddy build --with github.com/d7z-project/caddy-gitea-pages
 # 列出当前模块
 ./caddy list-modules | grep gitea
 ```

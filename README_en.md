@@ -9,7 +9,7 @@ English (Google TR) | [中文](./README.md)
 `xcaddy` utility is required to generate the Caddy executable with the following command
 
 ```bash
-xcaddy build --with git.d7z.net/d7z-project/caddy-gitea-pages
+xcaddy build --with github.com/d7z-project/caddy-gitea-pages
 # List the current modules
 . /caddy list-modules | grep gitea
 ```
