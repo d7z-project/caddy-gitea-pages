@@ -6,12 +6,20 @@
 
 ## 安装说明
 
-此处需要用到 `xcaddy` 工具，使用如下命令生成 Caddy 执行文件
+此处需要用到 `xcaddy` 工具，使用如下命令生成 Caddy 执行文件，
+如果 `xcaddy` 不存在，需先前往 [caddyserver/xcaddy](https://github.com/caddyserver/xcaddy/releases) 安装 `xcaddy`,
+同时安装好 Golang 1.21 
 
 ```bash
 xcaddy build --with github.com/d7z-project/caddy-gitea-pages
 # 列出当前模块
 ./caddy list-modules | grep gitea
+```
+
+当前项目也提供 `linux/amd64` 和 `linux/arm64` 的镜像:
+
+```bash
+docker pull ghcr.io/d7z-project/caddy-gitea-pages:nightly
 ```
 
 ## 配置说明
@@ -42,7 +50,6 @@ gitea {
 
 更详细的配置可查看 [Caddyfile](./Caddyfile)
 
-
 ## 使用说明
 
 仓库 `https://gitea.com/owner/repo.git` 对应示例配置中的 `owner.example.com/repo`
@@ -59,9 +66,9 @@ gitea {
 
 ## TODO
 
-- [ ] 优化并发模型和处理竞争问题
-- [x] 支持 CNAME
+- [x] 支持 CNAME 自定义路径 (仅适用于 HTTP 模式，不处理 acme 相关的内容)
 - [x] 支持内容缓存
+- [ ] 优化并发模型和处理竞争问题
 - [ ] 支持 Http Range 断点续传
 - [ ] 支持 oauth2 登录访问私有页面
 
