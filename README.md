@@ -8,10 +8,10 @@
 
 此处需要用到 `xcaddy` 工具，使用如下命令生成 Caddy 执行文件，
 如果 `xcaddy` 不存在，需先前往 [caddyserver/xcaddy](https://github.com/caddyserver/xcaddy/releases) 安装 `xcaddy`,
-同时安装好 Golang 1.21 
+同时安装好 Golang 1.22
 
 ```bash
-xcaddy build --with github.com/d7z-project/caddy-gitea-pages
+xcaddy build v2.8.1 --with github.com/d7z-project/caddy-gitea-pages
 # 列出当前模块
 ./caddy list-modules | grep gitea
 ```
