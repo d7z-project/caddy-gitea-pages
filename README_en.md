@@ -14,9 +14,15 @@ xcaddy build --with github.com/d7z-project/caddy-gitea-pages
 . /caddy list-modules | grep gitea
 ```
 
+We also provides `linux/amd64` and `linux/arm64` images:
+
+```bash
+docker pull ghcr.io/d7z-project/caddy-gitea-pages:nightly
+```
+
 ## Configuration Notes
 
-After installing Caddy, write the following configuration in ``Caddyfile``.
+After installing Caddy, write the following configuration in `Caddyfile`.
 
 ```conf
 {

@@ -11,7 +11,7 @@
 同时安装好 Golang 1.22
 
 ```bash
-xcaddy build v2.8.1 --with github.com/d7z-project/caddy-gitea-pages
+xcaddy build v2.8.4 --with github.com/d7z-project/caddy-gitea-pages
 # 列出当前模块
 ./caddy list-modules | grep gitea
 ```
@@ -21,6 +21,8 @@ xcaddy build v2.8.1 --with github.com/d7z-project/caddy-gitea-pages
 ```bash
 docker pull ghcr.io/d7z-project/caddy-gitea-pages:nightly
 ```
+
+具体配置说明参考 `docker.io/library/caddy` 镜像。
 
 ## 配置说明
 
