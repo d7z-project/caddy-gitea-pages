@@ -1,7 +1,7 @@
-VERSION := 0.0.2
+VERSION := 0.0.3
 
 dev:
-	@xcaddy run v2.8.4 -c Caddyfile.local
+	@xcaddy run v2.10.0 -c Caddyfile.local
 
 fmt:
 	@go fmt
