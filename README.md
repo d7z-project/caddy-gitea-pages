@@ -3,6 +3,7 @@
 [English](./README.en.md)|中文
 
 > 参照 Github Pages 实现的 Gitea Pages
+> 
 > 当前项目处于维护模式，你也可以看看我的另一个项目 [d7z-project/gitea-pages](https://github.com/d7z-project/gitea-pages)
 
 ## 安装说明

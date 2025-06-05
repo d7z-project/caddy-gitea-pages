@@ -3,6 +3,7 @@
 English|[中文](README.md)
 
 > Gitea Pages implementation inspired by Github Pages  
+> 
 > This project is currently in maintenance mode. You may also check out my other project: [d7z-project/gitea-pages](https://github.com/d7z-project/gitea-pages)
 
 ## Installation Guide
