@@ -1,10 +1,11 @@
 package pages
 
 import (
-	"code.gitea.io/sdk/gitea"
-	"go.uber.org/zap"
 	"strconv"
 	"strings"
+
+	"code.gitea.io/sdk/gitea"
+	"go.uber.org/zap"
 )
 
 type AutoRedirect struct {
@@ -55,7 +56,6 @@ func NewPageClient(
 	if err != nil {
 		return nil, err
 	}
-	ownerCache := NewOwnerCache(config.CacheRefresh, config.CacheTimeout)
 	giteaConfig := &GiteaConfig{
 		Server:        config.Server,
 		Token:         config.Token,
@@ -64,7 +64,6 @@ func NewPageClient(
 		CacheMaxSize:  config.CacheMaxSize,
 		CustomHeaders: config.CustomHeaders,
 	}
-	domainCache := NewDomainCache(config.CacheRefresh, config.CacheTimeout)
 	logger.Info("gitea cache ttl " + strconv.FormatInt(config.CacheTimeout.Milliseconds(), 10) + " ms .")
 	return &PageClient{
 		GiteaConfig:  giteaConfig,
@@ -73,8 +72,8 @@ func NewPageClient(
 		ErrorPages:   pages,
 		logger:       logger,
 		AutoRedirect: config.AutoRedirect,
-		DomainCache:  &domainCache,
-		OwnerCache:   &ownerCache,
+		DomainCache:  new(NewDomainCache(config.CacheRefresh, config.CacheTimeout)),
+		OwnerCache:   new(NewOwnerCache(config.CacheRefresh, config.CacheTimeout)),
 	}, nil
 }
 

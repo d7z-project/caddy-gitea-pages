@@ -10,10 +10,10 @@ English|[中文](README.md)
 
 The `xcaddy` tool is required for this step. Use the following command to generate the Caddy executable.  
 If `xcaddy` is not installed, download it from [caddyserver/xcaddy](https://github.com/caddyserver/xcaddy/releases) first.  
-Additionally, ensure Golang 1.24 is installed.
+Additionally, ensure Golang 1.26 is installed.
 
 ```bash
-xcaddy build v2.10.0 --with github.com/d7z-project/caddy-gitea-pages
+xcaddy build v2.11.0 --with github.com/d7z-project/caddy-gitea-pages
 # List current modules
 ./caddy list-modules | grep gitea
 ```

@@ -3,10 +3,11 @@ package pages
 import (
 	"encoding/json"
 	"fmt"
-	cmap "github.com/orcaman/concurrent-map/v2"
 	"os"
 	"strings"
 	"sync"
+
+	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
 var shared = cmap.New[PageDomain]()
@@ -67,11 +68,9 @@ func NewCustomDomains(local string, share bool) (*CustomDomains, error) {
 		fmt.Printf("Global Alias Enabled.\n")
 	}
 	stat, err := os.Stat(local)
-	alias := cmap.New[PageDomain]()
-	reverse := cmap.New[string]()
 	result := &CustomDomains{
-		Alias:   &alias,
-		Reverse: &reverse,
+		Alias:   new(cmap.New[PageDomain]()),
+		Reverse: new(cmap.New[string]()),
 		Mutex:   sync.Mutex{},
 		Local:   local,
 		Share:   share,
